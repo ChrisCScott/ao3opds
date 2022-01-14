@@ -5,7 +5,7 @@ import unittest
 import datetime
 import pickle
 import AO3
-import downloader.opds
+import ao3opds.opds
 from ao3_work import TEST_WORK, TEST_WORK_ID
 
 class TestAO3OPDS(unittest.TestCase):
@@ -36,7 +36,7 @@ class TestAO3OPDS(unittest.TestCase):
 
     def test_entries(self):
         """ Tests that AO3WorksOPDS attrs are processed. """
-        opds = downloader.opds.AO3OPDS(self.works, id='id', title='title')
+        opds = ao3opds.opds.AO3OPDS(self.works, id='id', title='title')
         # Confirm that self.works has the correct structure
         self.assertEqual(len(opds.entries), len(self.works))
         for index, entry in enumerate(opds.entries):
@@ -47,7 +47,7 @@ class TestAO3OPDS(unittest.TestCase):
 
     def test_render(self):
         """ Tests that AO3OPDS feeds are generated correctly. """
-        opds = downloader.opds.AO3WorkOPDS(self.works, id='id', title='title')
+        opds = ao3opds.opds.AO3WorkOPDS(self.works, id='id', title='title')
         feed = opds.render()
         # Confirm that each of the represented OPDS tags is in the feed:
         self.assertIn()
@@ -57,65 +57,65 @@ class TestAO3WorkOPDS(unittest.TestCase):
 
     def test_init_title(self):
         """ Tests that the AO3OPDS.title attr is set properly. """
-        opds = downloader.opds.AO3OPDS(self.works)
+        opds = ao3opds.opds.AO3OPDS(self.works)
         self.assertEqual(opds.title, self.work.title)
 
     def test_init_authors(self):
         """ Tests that the AO3OPDS.authors attr is set properly. """
-        opds = downloader.opds.AO3OPDS(self.works)
+        opds = ao3opds.opds.AO3OPDS(self.works)
         self.assertEqual(opds.authors[0].name, self.work.authors[0])
 
     def test_init_categories(self):
         """ Tests that the AO3OPDS.categories attr is set properly. """
-        opds = downloader.opds.AO3OPDS(self.works)
+        opds = ao3opds.opds.AO3OPDS(self.works)
         self.assertEqual(opds.title, self.work.title)
 
     def test_init_title(self):
         """ Tests that the AO3OPDS.title attr is set properly. """
-        opds = downloader.opds.AO3OPDS(self.works)
+        opds = ao3opds.opds.AO3OPDS(self.works)
         self.assertEqual(opds.title, self.work.title)
 
     def test_init_title(self):
         """ Tests that the AO3OPDS.title attr is set properly. """
-        opds = downloader.opds.AO3OPDS(self.works)
+        opds = ao3opds.opds.AO3OPDS(self.works)
         self.assertEqual(opds.title, self.work.title)
 
     def test_init_title(self):
         """ Tests that the AO3OPDS.title attr is set properly. """
-        opds = downloader.opds.AO3OPDS(self.works)
+        opds = ao3opds.opds.AO3OPDS(self.works)
         self.assertEqual(opds.title, self.work.title)
 
     def test_init_title(self):
         """ Tests that the AO3OPDS.title attr is set properly. """
-        opds = downloader.opds.AO3OPDS(self.works)
+        opds = ao3opds.opds.AO3OPDS(self.works)
         self.assertEqual(opds.title, self.work.title)
 
     def test_init_title(self):
         """ Tests that the AO3OPDS.title attr is set properly. """
-        opds = downloader.opds.AO3OPDS(self.works)
+        opds = ao3opds.opds.AO3OPDS(self.works)
         self.assertEqual(opds.title, self.work.title)
 
     def test_init_title(self):
         """ Tests that the AO3OPDS.title attr is set properly. """
-        opds = downloader.opds.AO3OPDS(self.works)
+        opds = ao3opds.opds.AO3OPDS(self.works)
         self.assertEqual(opds.title, self.work.title)
 
     def test_init_title(self):
         """ Tests that the AO3OPDS.title attr is set properly. """
-        opds = downloader.opds.AO3OPDS(self.works)
+        opds = ao3opds.opds.AO3OPDS(self.works)
         self.assertEqual(opds.title, self.work.title)
 
     def test_init_title(self):
         """ Tests that the AO3OPDS.title attr is set properly. """
-        opds = downloader.opds.AO3OPDS(self.works)
+        opds = ao3opds.opds.AO3OPDS(self.works)
         self.assertEqual(opds.title, self.work.title)
 
     def test_init_title(self):
         """ Tests that the AO3OPDS.title attr is set properly. """
-        opds = downloader.opds.AO3OPDS(self.works)
+        opds = ao3opds.opds.AO3OPDS(self.works)
         self.assertEqual(opds.title, self.work.title)
 
     def test_init_title(self):
         """ Tests that the AO3OPDS.title attr is set properly. """
-        opds = downloader.opds.AO3OPDS(self.works)
+        opds = ao3opds.opds.AO3OPDS(self.works)
         self.assertEqual(opds.title, self.work.title)

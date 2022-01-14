@@ -10,7 +10,7 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
 setup(
-    name='ao3downloader', # Required
+    name='ao3opds', # Required
 
     # Versions should comply with PEP 440:
     # https://www.python.org/dev/peps/pep-0440/
@@ -21,7 +21,7 @@ setup(
     version='0.0.1a1',  # Required
 
     # A one-line description of what this project does.
-    description='A script for downloading EPUBs from AO3',  # Optional
+    description='A tool for generating OPDS feeds of AO3 works',  # Optional
 
     # An optional longer description of the project. PyPI uses this for the
     # body of text it shows users. This is the same as the README.
@@ -115,8 +115,8 @@ setup(
 
     # List additional URLs that are relevant to your project as a dict.
     project_urls={  # Optional
-        # 'Bug Reports': 'https://github.com/ChrisCScott/ao3downloader/issues',
+        'Bug Reports': 'https://github.com/ChrisCScott/ao3opds/issues',
         'Say Thanks!': 'https://twitter.com/ChrisCScott',
-        # 'Source': 'https://github.com/ChrisCScott/ao3downloader/',
+        'Source': 'https://github.com/ChrisCScott/ao3opds/',
     },
 )

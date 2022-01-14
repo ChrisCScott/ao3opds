@@ -1,5 +1,5 @@
-# AO3Downloader
-A tool for downloading ebooks from Archive of Our Own.
+# AO3OPDS
+A tool for generating OPDS feeds of works from Archive of Our Own.
 
 ## Use
 Using the script is as easy as entering the filenames of EPUB files in
