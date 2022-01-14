@@ -11,7 +11,7 @@ The package is designed to run as a script, simply by executing
 `download.py`, which are intended to be reusable.
 """
 
-__all__ = ['script', 'download', 'user']
+__all__ = ['script', 'download', 'user', 'opds']
 
 __version__ = '0.0.1'
 __author__ = 'Christopher Scott'
