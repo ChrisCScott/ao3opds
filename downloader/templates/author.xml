@@ -1,0 +1,5 @@
+<author>
+    <name>{%name%}</name>
+    <uri>{%uri%}</uri>
+    <email>{%email%}</email>
+</author>
