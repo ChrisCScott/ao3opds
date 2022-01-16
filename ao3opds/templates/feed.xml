@@ -74,8 +74,8 @@
             href="{{link.href}}"
             type="{{link.type}}"/>
     {% endfor %}
-{% endfor %}
 
     </entry>
+{% endfor %}
 
 </feed>
