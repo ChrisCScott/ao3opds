@@ -1,13 +1,14 @@
 """ Generate an OPDS feed from an AO3 user's Marked for Later list. """
 
 import sys
+import os
 import warnings
 import argparse
 import AO3
 from opds import AO3OPDS, OPDSPerson
 
 FEED_ID = "christopherscott.ca/apps/ao3opds/{username}"
-FEED_TITLE = "{username}'s AO3 Feed"
+FEED_TITLE = "{username}'s AO3 Marked for Later list"
 FEED_AUTHOR = OPDSPerson(
     name='Christopher Scott',
     uri='christopherscott.ca',
@@ -17,12 +18,16 @@ FEED_AUTHOR = OPDSPerson(
 parser = argparse.ArgumentParser(
     # Use module docstring as description:
     description=sys.modules[__name__].__doc__)
+# Provide args for username and password (also passable via environment
+# variable):
 parser.add_argument(
-    '-u', '--username', '--user', default=None, type=str, required=False,
-    help='AO3 username', dest='username', metavar='username')
+    '-u', '--username', '--user', type=str, required=False,
+    help='AO3 username', dest='username', metavar='username',
+    default=os.environ.get('AO3USERNAME'))
 parser.add_argument(
-    '-p', '--password', '--pass', default=None, type=str, required=False,
-    help='AO3 password', dest='password', metavar='password')
+    '-p', '--password', '--pass', type=str, required=False,
+    help='AO3 password', dest='password', metavar='password',
+    default=os.environ.get('AO3PASSWORD'))
 namespace = parser.parse_args()
 username = namespace.username
 password = namespace.password
@@ -37,7 +42,7 @@ if password is None:
 try:
     session = AO3.Session(username, password)
 except AO3.utils.LoginError:
-    warnings.warn(f'Could not log in to AO3 as {username}.')
+    warnings.warn(f'Could not log in to AO3 as {username}')
     quit()
 
 # Get the user's Marked for Later list:
@@ -53,7 +58,7 @@ feed = AO3OPDS(
     marked_for_later,
     id=FEED_ID.format(username=username),
     title=FEED_TITLE.format(username=username),
-    authors=FEED_AUTHOR)
+    authors=[FEED_AUTHOR])
 
 # Print to stdout, leave it to the shell to redirect:
 print(feed.render())
