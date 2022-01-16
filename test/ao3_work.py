@@ -13,6 +13,8 @@ TEST_WORK_ID = 2080878  # A work called "I am Groot"
 try:
     with open(PICKLE_FILE, 'rb') as file:
         TEST_WORK = pickle.load(file)
+    if TEST_WORK.id != TEST_WORK_ID:
+        raise BaseException('Wrong work loaded, go to except block')
 except:
     # Loads all metadata and full-text content via network requests:
     TEST_WORK = AO3.Work(TEST_WORK_ID)
