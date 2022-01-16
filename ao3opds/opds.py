@@ -9,7 +9,7 @@ from jinja2 import Environment, PackageLoader, select_autoescape
 import AO3
 
 env = Environment(
-    loader=PackageLoader("downloader"),
+    loader=PackageLoader("ao3opds"),
     autoescape=select_autoescape())
 
 FEED_ID_DEFAULT = "christopherscott.ca/apps/ao3opds/{username}"
