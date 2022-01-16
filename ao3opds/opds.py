@@ -198,15 +198,22 @@ class AO3WorkOPDS:
                 OPDSLink(url, rel=AO3_ACQUISITION_LINK_REL, type=mime))
         return links
 
-    def _extract_download_urls(self, filetypes: Iterable[str]=None) -> Iterable[str]:
+
+    def _extract_download_urls(
+            self, filetypes: str | Iterable[str]=None) -> Iterable[str]:
         """ Extracts download urls for an `AO3.Work` """
         # pylint: disable=protected-access
         # This is the only way to access the download links for an
         # AO3.Work without re-fetching the page of the work separately.
         download_list = self.work._soup.find("li", {"class": "download"})
         # pylint: enable=protected-access
-        if filetypes is not None:  # convert to lowercase for comparison
-            filetypes = map(str.lower, filetypes)
+        # For convenience, allow users to pass a single filetype as str:
+        if isinstance(filetypes, str):
+            filetypes = [filetypes]
+        # Convert filetypes to lowercase for easy comparison:
+        if filetypes is not None:
+            filetypes = list(map(str.lower, filetypes))
+        # Collect a list of download links:
         urls = []
         for download_option in download_list.findAll("li"):
             # Get the link for each download option:
