@@ -37,13 +37,27 @@ class TestAO3OPDS(TestAO3ABC):
 
     def test_render_id(self):
         """ Tests that AO3OPDS feeds generate ids correctly. """
-        tag = 'id'
-        val = '123'
-        opds = ao3opds.opds.AO3OPDS(self.works, id=val, title='title')
+        opds = ao3opds.opds.AO3OPDS(self.works, id='id!', title='title!')
         feed = opds.render()
-        # Confirm that each of the represented OPDS tags is in the feed:
-        ref_val = '<{tag}>{val}</{tag}>'.format(tag=tag, val=val)
-        self.assertIn(ref_val, feed)
+        # Check for an OPDS 'id' tag with the correct value:
+        self.assertIn(f'<id>{opds.id}</id>', feed)
+
+    def test_render_title(self):
+        """ Tests that AO3OPDS feeds generate titles correctly. """
+        opds = ao3opds.opds.AO3OPDS(self.works, id='id!', title='title!')
+        feed = opds.render()
+        # Check for an OPDS 'id' tag with the correct value:
+        self.assertIn(f'<title>{opds.title}</title>', feed)
+
+    def test_render_entries(self):
+        """ Tests that AO3OPDS feeds generate entries correctly. """
+        opds = ao3opds.opds.AO3OPDS(self.works, id='id', title='title')
+        feed = opds.render()
+        # Confirm that each work in `opds.works` has its id and title
+        # in the feed:
+        for entry in opds.entries:
+            self.assertIn(f'<id>{entry.id}</id>', feed)
+            self.assertIn(f'<title>{entry.title}</title>', feed)
 
     # TODO: Validate the OPDS feed as valid Atom via feedvalidator?
     # See: https://github.com/w3c/feedvalidator
