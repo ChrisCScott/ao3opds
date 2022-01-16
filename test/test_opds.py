@@ -11,28 +11,7 @@ class TestAO3ABC(unittest.TestCase):
 
     def setUp(self) -> None:
         # Get a work without fetching any data over the network:
-        self.work = copy(TEST_WORK)
-        # Change values to something easier to test:
-        self.work.id = TEST_WORK_ID
-        self.work.title = "Title"
-        # Don't overwrite authors, as this is a list[AO3.User]:
-        # self.work.authors = ["Author"]
-        self.work.categories = ["Category"]
-        self.work.characters = ["Character"]
-        self.work.fandoms = ["Fandom"]
-        self.work.language = "Language"
-        self.work.rating = "Rating"
-        self.work.relationships = ["Relationship"]
-        self.work.summary = "Summary"
-        self.work.tags = ["Tag"]
-        self.work.url = "URL"
-        self.work.date_published = datetime.datetime.now(
-            datetime.timezone.utc)
-        self.work.date_updated = self.work.date_published
-        # We can't actually set `loaded` manually, which is why we
-        # import a loaded work and set its variables. (An alternative
-        # would be to use `unittest.mock.Mock` - maybe in the future.)
-        # self.work.loaded = True
+        self.work = copy(TEST_WORK)  # copy to avoid mutating
         return super().setUp()
 
 class TestAO3OPDS(TestAO3ABC):
