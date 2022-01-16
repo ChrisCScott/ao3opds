@@ -22,6 +22,17 @@ AO3_ACQUISITION_LINK_REL = 'http://opds-spec.org/acquisition'
 AO3_DOWNLOAD_FILETYPES = ('AZW3', 'EPUB', 'HTML', 'MOBI', 'PDF')
 AO3_URL_BASE = 'https://archiveofourown.org/'
 
+# AO3 provides support for 'AZW3', 'EPUB', 'HTML', 'MOBI', and 'PDF'
+AO3_DOWNLOAD_MIME_TYPES = {
+    '.azw3': 'application/x-mobi8-ebook',
+    '.epub': 'application/epub+zip',
+    '.html': 'text/html',
+    '.mobi': 'application/x-mobipocket-ebook',
+    '.pdf': 'application/pdf'}
+# Ensure mimetypes supports each of these:
+for ext, type_ in AO3_DOWNLOAD_MIME_TYPES.items():
+    mimetypes.add_type(type_, ext)
+
 @dataclass
 class OPDSLink:
     """ An object renderable as an atom:link. """
@@ -192,8 +203,12 @@ class AO3WorkOPDS:
         links = []
         link_urls = self._extract_download_urls(filetypes)
         for url in link_urls:
-            # Infer the MIME-type of the file (None if not inferable):
-            (mime, _) = mimetypes.guess_type(url)
+            # `mimetypes` seems to have better luck if URLs are stripped
+            # of any non-path elements (i.e. query/fragment suffixes):
+            url_parts = urllib.parse.urlsplit(url)
+            guess_url = urllib.parse.urlunsplit((*url_parts[0:3], None, None))
+            # Infer the MIME-type of the file (None if not inferable)
+            (mime, _) = mimetypes.guess_type(guess_url)
             links.append(
                 OPDSLink(url, rel=AO3_ACQUISITION_LINK_REL, type=mime))
         return links
