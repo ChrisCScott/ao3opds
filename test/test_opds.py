@@ -3,6 +3,7 @@
 from copy import copy
 import unittest
 import datetime
+import xml.etree.ElementTree as xml
 import ao3opds.opds
 from ao3_work import TEST_WORK
 
@@ -58,6 +59,15 @@ class TestAO3OPDS(TestAO3ABC):
         for entry in opds.entries:
             self.assertIn(f'<id>{entry.id}</id>', feed)
             self.assertIn(f'<title>{entry.title}</title>', feed)
+
+    def test_render_XML(self):
+        """ Tests that AO3OPDS.render() generates valid XML. """
+        opds = ao3opds.opds.AO3OPDS(self.works, id='id', title='title')
+        feed = opds.render()
+        try:
+            _ = xml.fromstring(feed)
+        except xml.ParseError as error:
+            self.fail('OPDS feed is not valid XML. Parser error: ' + str(error))
 
     # TODO: Validate the OPDS feed as valid Atom via feedvalidator?
     # See: https://github.com/w3c/feedvalidator
