@@ -76,7 +76,7 @@ class AO3OPDS:
         # Pick the correct template (in this case, an OPDS feed):
         template = env.get_template("feed.xml")
         # Render the template for this feed and return the result:
-        return template.render(self)
+        return template.render(self.__dict__)
 
 class AO3WorkOPDS:
     """ An object renderable as an entry in an OPDS feed of AO3 works. """
@@ -224,7 +224,7 @@ class AO3WorkOPDS:
         # Pick the correct template (in this case, an OPDS feed entry):
         template = env.get_template("entry.xml")
         # Render the template for this entry and return the result:
-        return template.render(self)
+        return template.render(self.__dict__)
 
 class AO3UserOPDS:
     """ Renders an AO3.User as an atom:Person."""
