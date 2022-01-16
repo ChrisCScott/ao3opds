@@ -5,15 +5,13 @@ import datetime
 import mimetypes
 import urllib.parse
 from typing import Iterable
+import warnings
 from jinja2 import Environment, PackageLoader, select_autoescape
 import AO3
 
 env = Environment(
     loader=PackageLoader("ao3opds"),
     autoescape=select_autoescape())
-
-FEED_ID_DEFAULT = "christopherscott.ca/apps/ao3opds/{username}"
-FEED_TITLE_DEFAULT = "{username}'s AO3 Feed"
 
 AO3_PUBLISHER = "Archive of Our Own"
 AO3_TAG_SCHEMA = 'https://archiveofourown.org/faq/tags'
@@ -103,7 +101,10 @@ class AO3WorkOPDS:
         if not work.loaded:
             # Only load the full-text if we need to:
             load_chapters = get_content or get_images
-            work.reload(load_chapters=load_chapters)
+            try:
+                work.reload(load_chapters=load_chapters)
+            except AO3.utils.InvalidIdError as error:
+                warnings.warn(f'Could not load work #{work.id}')
 
         # Instantiate!
         self.title = work.title
