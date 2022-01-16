@@ -108,8 +108,16 @@ class AO3WorkOPDS:
         # Instantiate!
         self.title = work.title
         self.id = str(work.url).lower() # lowercase recommended for id
-        self.updated = work.date_updated.astimezone(
-            datetime.timezone.utc).isoformat()
+        # It's not clear how AO3 differentiates between edits and
+        # updates, but for OPDS purposes we want to use whichever one
+        # is later. (AO3.Work guarantees these are non-None; they fall
+        # back to AO3.Work.date_published if never updated/edited:)
+        if work.date_edited > work.date_updated:
+            updated = work.date_edited
+        else:
+            updated = work.date_updated
+        self.updated = updated.astimezone(datetime.timezone.utc).isoformat()
+        # Ensure `authors` is non-None. We iterate over it in `render()`
         self.authors = []
         for author in work.authors:
             self.authors.append(AO3UserOPDS(author))
