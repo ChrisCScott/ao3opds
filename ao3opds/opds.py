@@ -85,8 +85,8 @@ class AO3WorkOPDS:
 
     def __init__(self,
             work:AO3.Work,
-            acquisition_filetypes=None,
-            get_content=False, get_images=False):
+            acquisition_filetypes: str | Iterable[str]=None,
+            get_content:bool=False, get_images:bool=False):
         self.work = work
         # Ensure the work's metadata is loaded
         if not work.loaded:
