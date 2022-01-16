@@ -6,7 +6,8 @@ import AO3
 import pickle
 
 PICKLE_FILE = 'test/work_pickle'
-TEST_WORK_ID = 18117086
+TEST_WORK_ID = 2080878  # A work called "I am Groot"
+# Read it here: https://archiveofourown.org/works/2080878
 
 # To limit network use during tests, try to load the Work via pickle:
 try:
