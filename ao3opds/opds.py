@@ -83,7 +83,10 @@ class AO3OPDS:
 class AO3WorkOPDS:
     """ An object renderable as an entry in an OPDS feed of AO3 works. """
 
-    def __init__(self, work:AO3.Work, get_content=False, get_images=False):
+    def __init__(self,
+            work:AO3.Work,
+            acquisition_filetypes=None,
+            get_content=False, get_images=False):
         self.work = work
         # Ensure the work's metadata is loaded
         if not work.loaded:
@@ -111,7 +114,8 @@ class AO3WorkOPDS:
         self.links = []
 
         # Add an OPDSLink for each acquisition option (EPUB/etc.)
-        self.links.extend(self.get_acquisition_links())
+        self.links.extend(self.get_acquisition_links(
+            filetypes=acquisition_filetypes))
 
         # Add full-text and links to images if we have been asked:
         # (Note: Either of these will cause the full text of the work
