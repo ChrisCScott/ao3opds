@@ -66,6 +66,8 @@ class AO3OPDS:
             self.updated = now.isoformat()
 
         self.authors: Iterable[OPDSPerson] | None = authors
+        if self.authors is None:
+            self.authors = []
 
         self.entries: Iterable[AO3WorkOPDS] = []
         for work in works:
