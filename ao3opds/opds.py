@@ -210,9 +210,29 @@ class AO3WorkOPDS:
             # Infer the MIME-type of the file (None if not inferable)
             (mime, _) = mimetypes.guess_type(guess_url)
             links.append(
-                OPDSLink(url, rel=AO3_ACQUISITION_LINK_REL, type=mime))
+                OPDSLink(
+                    url, rel=AO3_ACQUISITION_LINK_REL, type=mime,
+                    hreflang=self.work.language,
+                    title=self._get_acquisition_link_title(mime)))
         return links
 
+    def _get_acquisition_link_title(self, mime_type:str | None):
+        """ Gets a link title for an acquisition link based on mime-type """
+        # If we don't know the mime-type, return a generic title:
+        if mime_type is None:
+            return f'Download link for {self.work.title}'
+        # Otherwise, try to infer the extension for this type of file:
+        ext = mimetypes.guess_extension(mime_type)
+        # If we can't, use the generic title above:
+        if ext is None:
+            return self._get_acquisition_link_title(None)
+        # If we can infer the filetype, use a more informative title:
+        # First, convert mime-type extensions (e.g. '.pdf') to something
+        # friendlier (e.g. 'PDF)
+        filetype = ext.upper()
+        if filetype[0] == '.':
+            filetype = filetype[1:]
+        return f'{filetype} download link for {self.work.title}'
 
     def _extract_download_urls(
             self, filetypes: str | Iterable[str]=None) -> Iterable[str]:
