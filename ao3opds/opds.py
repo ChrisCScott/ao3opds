@@ -11,7 +11,8 @@ import AO3
 
 env = Environment(
     loader=PackageLoader("ao3opds"),
-    autoescape=select_autoescape())
+    autoescape=select_autoescape(),
+    trim_blocks=True)
 
 AO3_PUBLISHER = "Archive of Our Own"
 AO3_TAG_SCHEMA = 'https://archiveofourown.org/faq/tags'
