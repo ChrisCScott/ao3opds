@@ -4,7 +4,7 @@ from copy import copy
 import unittest
 import datetime
 import ao3opds.opds
-from ao3_work import TEST_WORK, TEST_WORK_ID
+from ao3_work import TEST_WORK
 
 class TestAO3ABC(unittest.TestCase):
     """ ABC for test cases of `ao3opds.opds` classes. """
