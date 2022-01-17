@@ -96,9 +96,10 @@ class TestAO3WorkOPDS(TestAO3ABC):
             self.work.categories + self.work.characters + self.work.fandoms +
             [self.work.rating] + self.work.relationships + self.work.tags +
             self.work.warnings)
-        # AO3 categories are represented in the `term` element of an
-        # OPDS category (scheme/label elements are optional metadata):
-        categories = [category.term for category in opds.categories]
+        # AO3 categories are represented in the `term` and `label`
+        # elements of an OPDS category; use `label`, which is 
+        # human-readable:
+        categories = [category.label for category in opds.categories]
         for tag in tags:
             self.assertIn(tag, categories)
 
