@@ -106,6 +106,13 @@ class AO3WorkOPDS:
                 work.reload(load_chapters=load_chapters)
             except AO3.utils.InvalidIdError as error:
                 warnings.warn(f'Could not load work #{work.id}')
+        # pylint: disable=private-access
+        # `AO3` does not provide a way to access certain attributes of
+        # a work's metadata, so we sometimes need to parse the HTML
+        # ourselves. We can access it as a pre-loaded BeautifulSoup
+        # object via `AO3.Work._soup`.
+        self._soup = work._soup
+        # pylint: enable=private-access
 
         # Instantiate!
         self.title = work.title
@@ -151,25 +158,50 @@ class AO3WorkOPDS:
         # AO3 uses the concept of 'tags', which includes fandom,
         # character, relationship, ratings, categories, warnings,
         # and additional tags. We need to add each of these.
-        # Apply a separate label for each type for disambiguation.
-        categories = []
-        for tag in self.work.categories:
-            categories.append(OPDSCategory(tag, AO3_TAG_SCHEMA, 'category'))
-        for tag in self.work.fandoms:
-            categories.append(OPDSCategory(tag, AO3_TAG_SCHEMA, 'fandom'))
-        for tag in self.work.characters:
-            categories.append(OPDSCategory(tag, AO3_TAG_SCHEMA, 'character'))
-        for tag in self.work.relationships:
-            categories.append(OPDSCategory(tag, AO3_TAG_SCHEMA, 'relationship'))
-        for tag in self.work.warnings:
-            categories.append(OPDSCategory(tag, AO3_TAG_SCHEMA, 'warning'))
-        for tag in self.work.tags:
-            categories.append(OPDSCategory(tag, AO3_TAG_SCHEMA, 'tag'))
-        # Each work has exactly one rating:
-        if self.work.rating is not None:
-            categories.append(
-                OPDSCategory(self.work.rating, AO3_TAG_SCHEMA, 'rating'))
+        tags = (
+            self.work.categories + self.work.fandoms + self.work.characters +
+            self.work.relationships + self.work.warnings + self.work.tags)
+        if self.work.rating is not None:  # `rating` is an item, not a list
+            tags.append(self.work.rating)
+        # The `term` element of an OPDS category would ideally point to
+        # the URL for each tag (e.g. for the "Explicit" tag, this would
+        # be https://archiveofourown.org/tags/Explicit).
+        # The element "label" is the human-readable term for that
+        # specific tag. The "scheme" element is the same for all tags.
+        categories = [
+            OPDSCategory(self._tag_to_url(tag), AO3_TAG_SCHEMA, tag)
+            for tag in tags]
         return categories
+
+    def _tag_to_url(self, tag):
+        """ Gets the url for an AO3 tag. """
+        # Find the link that points to `tag` and return its url:
+        link = self._soup.find('a', string=tag)
+        if link is not None:
+            url = link.attrs['href']
+            # Trim trailing `/works` portion of URL, if present:
+            url = url.removesuffix('/works')
+            return url
+        # Every tag on AO3 maps to a url of the form
+        # `https://archiveofourown.org/tags/{tag-stub}`.
+        # AO3 uses an idiosyncratic url-encoding for tag-stubs; e.g.
+        # they encode '&' as '*a*' instead of '%26', they don't encode
+        # single-quotes ("'"), they do encode dots ('.'->'*d*'), and
+        # so on. Plus, some tags and stubs use different text; e.g.
+        # 'Creator Chose Not To Use Archive Warnings' has the stub
+        # 'Choose Not To Use Archive Warnings' (after url-unquoting).
+        # If we wanted to manually create urls for tags, we'd need:
+        #   (a) a list of characters that are (or aren't) url-quoted
+        #   (b) a mapping of characters that are specially-quoted to
+        #       their quote pattern (e.g. '.'->'*d*').
+        #   (c) a mapping of tags with special tag-url mappings to urls
+        #       (e.g. 'Creator Chose Not To Use Archive Warnings' ->
+        #       'Choose Not To Use Archive Warnings')
+        # We don't have those things, and in testing the above seems to
+        # work fine, so rather than try to guess urls we'll just return
+        # the tag itself on failure (which is permitted; `term` does
+        # not have to be a URI or otherwise be machine-readable.)
+        return tag
 
     def get_content(self) -> str:
         """ Extracts an `AO3.Work`'s full-text content (for all chapters) """
@@ -247,11 +279,7 @@ class AO3WorkOPDS:
     def _extract_download_urls(
             self, filetypes: str | Iterable[str]=None) -> Iterable[str]:
         """ Extracts download urls for an `AO3.Work` """
-        # pylint: disable=protected-access
-        # This is the only way to access the download links for an
-        # AO3.Work without re-fetching the page of the work separately.
-        download_list = self.work._soup.find("li", {"class": "download"})
-        # pylint: enable=protected-access
+        download_list = self._soup.find("li", {"class": "download"})
         # For convenience, allow users to pass a single filetype as str:
         if isinstance(filetypes, str):
             filetypes = [filetypes]
@@ -295,84 +323,3 @@ class AO3UserOPDS:
             self.name = user.username
             self.uri = user.url
         self.email = None  # Not provided for AO3 authors
-
-def get_acquisition_links(work:AO3.Work) -> list[str]:
-    """ """
-    # TODO: Will probably need to parse work._soup
-    return []
-
-# TODO: Write wrappers that turn AO3.Work into dicts of OPDS attributes,
-# with helper functions that construct authors/contributors, links,
-# and categories appropriately. (Consider using `mimetypes` module for
-# generating mimetypes for images/etc; may need to hard-code mimetypes
-# for links to OPDS resources, if any.)
-
-# Attributes of AO3.Work that should be represented in an OPDS catalog:
-#   1. title
-#   2. EPUB url (and alternative links?)
-#   3. authors
-#   4. complete/WIP status
-#   5. number of chapters
-#   6. hits
-#   7. kudos
-#   8. comments (count)
-#   9. restricted status
-#   10. work count
-#   11. language
-#   12. bookmarks (count)
-#   13. date published
-#   14. date updated
-#   15. tags
-#   16. characters
-#   17. relationships
-#   18. fandoms
-#   19. categories (c.f. https://archiveofourown.org/faq/tutorial-posting-a-work-on-ao3?language_id=en#pwtcategory)
-#   20. warnings
-#   21. rating
-#   22. summary
-#   23. AO3 canonical url
-# Other attributes:
-#   1. URN
-#      (generate distinct UUID for each user by hashing username and
-#       passing to uuid4()? Or create one UUID for the dynamic catalog?)
-#      (c.f. https://docs.python.org/3/library/uuid.html)
-#   2. Feed title
-#      ("{username}'s Marked For Later list"?)
-#   3. Related links?
-#      (Only if providing OPDS catalogs for, e.g., bookmarks. Not in v1)
-#   4. Updated
-#      (Provide current time? Only if there are changes since last call?
-#       Avoid repeated calls if within a short period of time?)
-#   5. Author name
-#      (me!)
-#   6. Author URI
-#      (my website!)
-#
-# OPDS 1.2 Entry Metadata tags:
-# See https://datatracker.ietf.org/doc/html/rfc4287#page-17
-#   1. author: atom:Person construct
-#   2. category: term[, scheme, label]
-#   3. contributor: atom:Person construct
-#   4. generator: string[, uri, version]
-#   5. icon: URL
-#   6. id: uuid (may be canonical link to work)
-#   7. link: href (URL), rel (URL), type (MIME), hreflang (language),
-#      title (string), length (int)
-#   8. logo: URL (2x1 aspect ratio)
-#   9. published: atom:Date
-#   10. rights: string
-#   11. source: copy of metadata from source Atom feed
-#   12. subtitle: string
-#   13. summary: string
-#   14. title: string
-#   15. updated: atom:Date
-
-# Support request with Bluehost to be added to Compilers group: 37925740
-# Installing Python 3.10.1
-# Login via SSH: ssh -p 2222 hristrf2@162.241.219.11
-# To set up Python, follow instructions at:
-# https://www.bluehost.com/help/article/python-installation
-# To set up a WSGI application, try this:
-# https://docs.cpanel.net/knowledge-base/web-services/how-to-install-a-python-wsgi-application/
-# (Look into using Flask to serve CGI pages; perhaps a templating
-# library to allow for generation of OPDS catalogs from a template)
