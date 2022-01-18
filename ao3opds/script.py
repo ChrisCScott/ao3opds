@@ -1,30 +1,45 @@
-""" A script for downloading EPUB files from AO3 based on a list of titles """
+""" CLI script to generate an OPDS feed from a Marked for Later list. """
 
-from download import get_titles, get_download_url, download_EPUB
+import sys
+import os
+import warnings
+import argparse
+import AO3
+from ao3opds.marked_for_later_opds import get_AO3_session, get_marked_for_later_opds
+from opds import AO3OPDS, OPDSPerson
 
-# The local text file to pull filenames from:
-FILENAME = "downloader/downloads.txt"
+# Parse command-line arguments:
+parser = argparse.ArgumentParser(
+    # Use module docstring as description:
+    description=sys.modules[__name__].__doc__)
+# Provide args for username and password (also passable via environment
+# variable):
+parser.add_argument(
+    '-u', '--username', '--user', type=str, required=False,
+    help='AO3 username', dest='username', metavar='username',
+    default=os.environ.get('AO3USERNAME'))
+parser.add_argument(
+    '-p', '--password', '--pass', type=str, required=False,
+    help='AO3 password', dest='password', metavar='password',
+    default=os.environ.get('AO3PASSWORD'))
+namespace = parser.parse_args()
+username = namespace.username
+password = namespace.password
 
-# Function for pulling filenames from a local text file:
-def get_titles(filename):
-    """ Returns a list of titles, each a line in `filename` """
-    # Get list of work titles from a local file:
-    titles = []
-    with open(filename, 'r') as file:
-        for title in file:
-            # Remove leading/terminal whitespace
-            title = title.strip()
-            if title != "":
-                titles.append(title)
-    return titles
+# If session args weren't passed, request them from the user:
+if username is None:
+    username = input('AO3 username: ')
+if password is None:
+    password = input('AO3 password: ')
 
-# Here's the script! 
-titles = get_titles(FILENAME)
-for title in titles:
-    print("\nSearching for '" + title + "'")
-    download_url = get_download_url(title)
-    if download_url is None:
-        print("Could not find download URL. Skipping.")
-        continue
-    print("Found URL: ", download_url)
-    download_EPUB(download_url, require_filename=title, verbose=True)
+# Authenticate with AO3:
+try:
+    session = AO3.Session(username, password)
+except AO3.utils.LoginError as error:
+    warnings.warn(f'Could not log in to AO3 as {username}: ' + str(error))
+    quit()
+
+feed = get_marked_for_later_opds(session)
+
+# Print to stdout, leave it to the shell to redirect:
+print(feed)
