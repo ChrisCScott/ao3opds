@@ -17,6 +17,7 @@ env = Environment(
 AO3_PUBLISHER = "Archive of Our Own"
 AO3_TAG_SCHEMA = 'https://archiveofourown.org/faq/tags'
 AO3_IMAGE_LINK_REL = 'http://opds-spec.org/image'
+AO3_IMAGE_LINK_REL_THUMB = 'http://opds-spec.org/image/thumbnail'
 AO3_ACQUISITION_LINK_REL = 'http://opds-spec.org/acquisition'
 AO3_DOWNLOAD_FILETYPES = ('AZW3', 'EPUB', 'HTML', 'MOBI', 'PDF')
 AO3_URL_BASE = 'https://archiveofourown.org/'
