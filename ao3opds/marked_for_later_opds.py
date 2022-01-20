@@ -2,8 +2,7 @@
 
 import warnings
 import AO3
-from ao3opds.opds import OPDSPerson
-from opds import AO3OPDS
+from ao3opds.opds import OPDSPerson, AO3OPDS
 
 # Default values for Feed:
 FEED_ID = "christopherscott.ca/apps/ao3opds/{username}"
