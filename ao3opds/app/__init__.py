@@ -28,6 +28,10 @@ def create_app(test_config=None):
     def hello():
         return 'Hello, World!'
 
+    # Configure app to initialize database:
+    from . import db
+    db.init_app(app)
+
     return app
 
 # Installing Python WSGI application via cPanel:
