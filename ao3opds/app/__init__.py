@@ -32,6 +32,10 @@ def create_app(test_config=None):
     from . import db
     db.init_app(app)
 
+    # Register authentication module:
+    from . import auth
+    app.register_blueprint(auth.blueprint)
+
     return app
 
 # Installing Python WSGI application via cPanel:
