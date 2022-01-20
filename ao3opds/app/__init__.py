@@ -38,6 +38,14 @@ def create_app(test_config=None):
     # Ensure views referring to `index` point to root:
     app.add_url_rule('/', endpoint='index')
 
+    # Register OPDS feed (and homepage) module:
+    # TODO: Move homepage functionality to `auth` or elsewhere,
+    # let that other module use the '/' endpoint, and direct `feed`
+    # to the '/feed/' endpoint. (`feed.py` would be very simple in this
+    # case - good!)
+    from . import feed
+    app.register_blueprint(feed.blueprint)
+
     return app
 
 # Installing Python WSGI application via cPanel:
