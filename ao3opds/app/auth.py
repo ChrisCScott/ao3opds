@@ -6,7 +6,13 @@ from flask import (
 from werkzeug.security import check_password_hash, generate_password_hash
 from ao3opds.app.db import get_db
 
-blueprint = Blueprint('auth', __name__, url_prefix='/auth')
+# No url_prefix; these pages load at root (e.g. '/', '/login')
+blueprint = Blueprint('auth', __name__)
+
+@blueprint.route('/')
+def index():
+    """ Renders homepage (index) view. """
+    return render_template('auth/index.html')
 
 @blueprint.route('/register', methods=('GET', 'POST'))
 def register():

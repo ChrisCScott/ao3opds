@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+
+{% block header %}
+  <h1>{% block title %}Index{% endblock %}</h1>
+  {% if g.user %}
+    <a class="action" href="{{ url_for('feed.marked_for_later') }}">
+        Your Marked for Later OPDS feed
+    </a>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+    {% if g.user %}
+    <div>
+        <a class="action" href="{{ url_for('auth.logout') }}">Logout</a>
+    </div>
+    {% else %}
+    <div>
+        <a class="action" href="{{ url_for('auth.login') }}">Login</a>
+    </div>
+    <div>
+        <a class="action" href="{{ url_for('auth.register') }}">Register</a>
+    </div>
+    {% endif %}
+{% endblock %}

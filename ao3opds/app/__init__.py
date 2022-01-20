@@ -35,6 +35,8 @@ def create_app(test_config=None):
     # Register authentication module:
     from . import auth
     app.register_blueprint(auth.blueprint)
+    # Ensure views referring to `index` point to root:
+    app.add_url_rule('/', endpoint='index')
 
     return app
 
