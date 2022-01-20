@@ -1,0 +1,5 @@
+include ao3opds/app/schema.sql
+graft ao3opds/app/static
+graft ao3opds/app/templates
+graft ao3opds/templates
+global-exclude *.pyc
