@@ -1,11 +1,25 @@
 from flask import (
-    Blueprint, flash, g, redirect, render_template, request, url_for, abort)
+    Blueprint, flash, g, redirect, render_template, request, url_for,
+    abort, session)
 from werkzeug.exceptions import HTTPException
 from ao3opds.app.db import get_db
 from ao3opds.app.auth import login_required
 
 # No url_prefix; these pages load at root (e.g. '/', '/login')
 blueprint = Blueprint('ao3', __name__, url_prefix='/ao3')
+
+@blueprint.before_app_request  # Run before view function
+def load_ao3_credentials():
+    user_id = session.get('user_id')
+
+    # Store the active user's ao3 credentials in global var `g`
+    # at start of each request:
+    if user_id is None:
+        g.ao3 = None
+    else:
+        g.ao3 = get_db().execute(
+            'SELECT * FROM ao3 WHERE user_id = ?', (user_id,)
+        ).fetchone()
 
 def get_credentials():
     """ Gets AO3 credentials for current user. """
