@@ -26,7 +26,7 @@ def get_marked_for_later_opds(
         id:str=None, title:str=None, authors:list[OPDSPerson]=None):
     """ Returns an OPDS feed of Marked for Later lists for a user. """
     # Log in if a (username, password) pair were provided:
-    if not isinstance(AO3.Session):
+    if not isinstance(session, AO3.Session):
         session = get_AO3_session(session[0], session[1])
     if session is None:
         return None
