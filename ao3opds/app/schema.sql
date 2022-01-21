@@ -14,7 +14,7 @@ CREATE TABLE ao3 (
   user_id TEXT NOT NULL,
   username TEXT UNIQUE NOT NULL,
   password TEXT NOT NULL,
-  session TEXT,
+  session BLOB,
   updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES user (id)
 );
