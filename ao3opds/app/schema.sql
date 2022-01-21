@@ -22,9 +22,11 @@ CREATE TABLE ao3 (
 CREATE TABLE feed (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL,
+  ao3_id INTEGER NOT NULL,
   feed_type TEXT NOT NULL,
   updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   content TEXT NOT NULL,
   FOREIGN KEY (user_id) REFERENCES user (id),
-  UNIQUE KEY (user_id, feed_type)
+  FOREIGN KEY (ao3_id) REFERENCES ao3 (id),
+  UNIQUE (user_id, feed_type)
 );
