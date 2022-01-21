@@ -30,9 +30,6 @@ def register():
         elif not password:
             error = 'Password is required.'
 
-        # TODO: Validate that the user can authenticate with AO3,
-        # return an error if not.
-
         # Add user to database:
         if error is None:
             try:
