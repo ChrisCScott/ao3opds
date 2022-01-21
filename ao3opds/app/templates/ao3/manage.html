@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+
+{% block header %}
+  <h1>{% block title %}Manage AO3 Credentials{% endblock %}</h1>
+{% endblock %}
+
+{% block content %}
+  <form method="post">
+    <label for="username">AO3 Username</label>
+    <input name="username" id="username" required>
+    <label for="password">AO3 Password</label>
+    <input type="password" name="password" id="password" required>
+    <input type="submit" name="submit_button" value="Update">
+  </form>
+  <form method="post">
+    <input type="submit" name="submit_button" value="Delete">
+  </form>
+{% endblock %}

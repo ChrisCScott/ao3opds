@@ -38,6 +38,10 @@ def create_app(test_config=None):
     # Ensure views referring to `index` point to root:
     app.add_url_rule('/', endpoint='index')
 
+    # Register ao3 module:
+    from . import ao3
+    app.register_blueprint(ao3.blueprint)
+
     # Register OPDS feed (and homepage) module:
     # TODO: Move homepage functionality to `auth` or elsewhere,
     # let that other module use the '/' endpoint, and direct `feed`
