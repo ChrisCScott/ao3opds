@@ -35,8 +35,6 @@ def create_app(test_config=None):
     # Register authentication module:
     from . import auth
     app.register_blueprint(auth.blueprint)
-    # Ensure views referring to `index` point to root:
-    app.add_url_rule('/', endpoint='index')
 
     # Register ao3 module:
     from . import ao3
@@ -49,6 +47,12 @@ def create_app(test_config=None):
     # case - good!)
     from . import feed
     app.register_blueprint(feed.blueprint)
+
+    # Register naviation module:
+    from . import nav
+    app.register_blueprint(nav.blueprint)
+    # Ensure views referring to `index` point to root:
+    app.add_url_rule('/', endpoint='index')
 
     return app
 

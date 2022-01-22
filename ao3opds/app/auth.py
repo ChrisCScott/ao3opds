@@ -9,11 +9,6 @@ from ao3opds.app.db import get_db
 # No url_prefix; these pages load at root (e.g. '/', '/login')
 blueprint = Blueprint('auth', __name__)
 
-@blueprint.route('/')
-def index():
-    """ Renders homepage (index) view. """
-    return render_template('auth/index.html')
-
 @blueprint.route('/register', methods=('GET', 'POST'))
 def register():
     if request.method == 'POST':
