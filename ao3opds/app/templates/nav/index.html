@@ -8,11 +8,15 @@
 
 {% block content %}
     {% if g.user %}
+    <div><h2>Feeds</h2></div>
+    {% for feed_type, feed_url in feed_types.items() %}
     <div>
-        <a class="action" href="{{ url_for('feed.marked_for_later') }}">
-            Your Marked for Later OPDS feed
+        <a class="action" href="{{ url_for(feed_url) }}">
+            {{ feed_type }}
         </a>
     </div>
+    {% endfor %}
+    <div><h2>Manage</h2></div>
     <div>
         <a class="action" href="{{ url_for('ao3.manage') }}">
             Manage AO3 Credentials

@@ -9,6 +9,10 @@ import AO3
 # Feeds are stale after 5 minutes:
 REFRESH_FREQUENCY = datetime.timedelta(minutes=5)
 FEED_TYPE_MARKED_FOR_LATER = "Marked for Later"
+# NOTE: Update these if a new feed type is added:
+# This is a mapping of feed types (as represented in the DB) to
+# endpoints that are resolvable to urls via `url_for()`:
+FEED_TYPES = {FEED_TYPE_MARKED_FOR_LATER: 'feed.marked_for_later'}
 FEED_MIME_TYPE = 'text/xml'
 
 blueprint = Blueprint('feed', __name__, url_prefix='/feed')
