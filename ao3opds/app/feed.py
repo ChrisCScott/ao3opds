@@ -18,12 +18,12 @@ FEED_MIME_TYPE = 'text/xml'
 
 blueprint = Blueprint('feed', __name__, url_prefix='/feed')
 
-def render_feed(feed:str):
+def render_feed(feed:str) -> Response:
     """ Call this when returning from a view that displays a feed. """
     response = Response(feed, mimetype=FEED_MIME_TYPE)
     return response
 
-def render_marked_for_later_feed(session: AO3.Session):
+def render_marked_for_later_feed(session: AO3.Session) -> str:
     """ Generates an OPDS feed for a user's Marked for Later list """
     feed_id = url_for('feed.marked_for_later')
     feed_title = f"{session.username}'s Marked for Later list"
@@ -126,7 +126,7 @@ def marked_for_later():
         (user_id, FEED_TYPE_MARKED_FOR_LATER)
     ).fetchone()
 
-    # Generate a new feed if there's no cached feed (of if it's old)
+    # Generate a new feed if there's no cached feed (or if it's old)
     if feed is None:
         feed = render_marked_for_later_feed(session)
         # Store the feed:
