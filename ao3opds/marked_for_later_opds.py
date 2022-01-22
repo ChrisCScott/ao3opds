@@ -23,7 +23,8 @@ def get_AO3_session(username, password):
 
 def get_marked_for_later_opds(
         session: AO3.Session | tuple[str, str],
-        id:str=None, title:str=None, authors:list[OPDSPerson]=None):
+        id:str=None, title:str=None, authors:list[OPDSPerson]=None,
+        threaded=False):
     """ Returns an OPDS feed of Marked for Later lists for a user. """
     # Log in if a (username, password) pair were provided:
     if not isinstance(session, AO3.Session):
@@ -31,10 +32,10 @@ def get_marked_for_later_opds(
     if session is None:
         return None
     # Get the user's Marked for Later list:
-    marked_for_later = session.get_marked_for_later()
+    works = session.get_marked_for_later()
     # The current version of `ao3_api` does not set the session on works
     # returned from `session.get_marked_for_later()`, so do that here:
-    for work in marked_for_later:
+    for work in works:
         work.set_session(session)
 
     # Default arguments:
@@ -46,6 +47,7 @@ def get_marked_for_later_opds(
         authors=[FEED_AUTHOR]
 
     # Generate an OPDS feed for the works:
-    opds = AO3OPDS(marked_for_later, id=id, title=title, authors=authors)
+    opds = AO3OPDS(
+        works, id=id, title=title, authors=authors, threaded=threaded)
     feed = opds.render()
     return feed
