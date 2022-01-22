@@ -90,6 +90,12 @@ def set_credentials(username, password):
     # raises `AO3.utils.LoginError`
     session = AO3.Session(username, password)
 
+
+    # If switching to another AO3 user account, drop the existing
+    # records (which will cause following code to create new ones):
+    if g.ao3 is not None and g.ao3['username'] != username:
+        delete_credentials()
+
     # Check for existing AO3 credentials:
     if g.ao3 is None:
         # Add new record for this user:
@@ -102,12 +108,15 @@ def set_credentials(username, password):
         # user can manage their sharing permissions:
         prepopulate_feeds(user_id)
         return
-    # If AO3 credentials were found, we need to update, not insert:
+    # If credentials for the same AO3 user account are already present,
+    # just update them - we're just updating the password.
     db.execute(
         "UPDATE ao3 SET username = ?, password = ?, session = ?,"
         " updated = CURRENT_TIMESTAMP WHERE user_id = ?",
         (username, password, dump_ao3_session(session), user_id))
     db.commit() # Save changes to file
+    # Update `g` attributes with new AO3 record and session:
+    load_ao3_credentials()
 
 def delete_credentials():
     """ Delete AO3 credentials for the current user. """
@@ -122,6 +131,8 @@ def delete_credentials():
     # Also delete all records of AO3 feeds:
     db.execute('DELETE FROM feed WHERE user_id = ?', (user_id,))
     db.commit()  # Save changes to file
+    g.ao3 = None
+    g.ao3_session = None
 
 @blueprint.route('/manage', methods=('GET', 'POST'))
 @login_required
