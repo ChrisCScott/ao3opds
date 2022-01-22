@@ -28,7 +28,7 @@ def render_marked_for_later_feed(session: AO3.Session) -> str:
     feed_id = url_for('feed.marked_for_later')
     feed_title = f"{session.username}'s Marked for Later list"
     feed = get_marked_for_later_opds(
-        session, feed_id, feed_title, [FEED_AUTHOR])
+        session, feed_id, feed_title, [FEED_AUTHOR], threaded=True)
     return feed
 
 def refresh_marked_for_later_feed(
