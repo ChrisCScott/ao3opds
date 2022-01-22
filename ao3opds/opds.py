@@ -1,6 +1,7 @@
 """ Provides basic OPDS support for AO3 works. """
 
 from dataclasses import dataclass
+import concurrent.futures
 import datetime
 import mimetypes
 import urllib.parse
@@ -33,6 +34,8 @@ AO3_DOWNLOAD_MIME_TYPES = {
 for ext, type_ in AO3_DOWNLOAD_MIME_TYPES.items():
     mimetypes.add_type(type_, ext)
 
+MAX_THREADS = 4
+
 @dataclass
 class OPDSLink:
     """ An object renderable as an atom:link. """
@@ -63,7 +66,8 @@ class AO3OPDS:
     def __init__(
             self, works: Iterable[AO3.Work], id: str, title: str,
             links: Iterable[OPDSLink]=None, updated:datetime.datetime=None,
-            authors: Iterable[OPDSPerson]=None):
+            authors: Iterable[OPDSPerson]=None,
+            threaded=False):
         self.id: str = id  # required
         self.title: str = title # required
 
@@ -80,9 +84,16 @@ class AO3OPDS:
         if self.authors is None:
             self.authors = []
 
-        self.entries: Iterable[AO3WorkOPDS] = []
-        for work in works:
-            self.entries.append(AO3WorkOPDS(work))
+        if not threaded:
+            self.entries: Iterable[AO3WorkOPDS] = []
+            for work in works:
+                self.entries.append(AO3WorkOPDS(work))
+        else:  # threading support!
+            self.entries: Iterable[AO3WorkOPDS] = [None] * len(works)
+            def thread_function(index, work):
+                self.entries[index] = AO3WorkOPDS(work)
+            with concurrent.futures.ThreadPoolExecutor(MAX_THREADS) as exec:
+                exec.map(thread_function, range(len(works)), works)
 
     def render(self):
         """ Renders this object as an OPDS feed. """

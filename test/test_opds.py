@@ -69,8 +69,34 @@ class TestAO3OPDS(TestAO3ABC):
         except xml.ParseError as error:
             self.fail('OPDS feed is not valid XML. Parser error: ' + str(error))
 
-    # TODO: Validate the OPDS feed as valid Atom via feedvalidator?
-    # See: https://github.com/w3c/feedvalidator
+    def test_threaded_1(self):
+        """ Tests that AO3OPDS works with threaded=True and one AO3.Work """
+        # This test is identical to `test_entries`, except that the
+        # AO3OPDS object is init in threaded mode:
+        opds = ao3opds.opds.AO3OPDS(
+            self.works, id='id', title='title', threaded=True)
+        # Confirm that self.works has the correct structure
+        self.assertEqual(len(opds.entries), len(self.works))
+        for index, entry in enumerate(opds.entries):
+            # Check a couple of entry attributes to confirm that
+            # each entry matches the corresponding Work:
+            self.assertEqual(entry.title, self.works[index].title)
+            self.assertEqual(entry.summary, self.works[index].summary)
+
+    def test_threaded_2(self):
+        """ Tests that AO3OPDS works with threaded=True and two AO3.Works """
+        # This is the same as `test_threaded_1`, except that there are
+        # two works (and thus two threads).
+        self.works.append(copy(self.work))
+        opds = ao3opds.opds.AO3OPDS(
+            self.works, id='id', title='title', threaded=True)
+        # Confirm that self.works has the correct structure
+        self.assertEqual(len(opds.entries), len(self.works))
+        for index, entry in enumerate(opds.entries):
+            # Check a couple of entry attributes to confirm that
+            # each entry matches the corresponding Work:
+            self.assertEqual(entry.title, self.works[index].title)
+            self.assertEqual(entry.summary, self.works[index].summary)
 
 class TestAO3WorkOPDS(TestAO3ABC):
     """ Tests `ao3opds.opds.AO3WorkOPDS`. """
