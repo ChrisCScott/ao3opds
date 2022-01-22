@@ -21,10 +21,10 @@ def get_AO3_session(username, password):
         return None
     return session
 
-def get_marked_for_later_opds(
+def fetch_marked_for_later(
         session: AO3.Session | tuple[str, str],
         id:str=None, title:str=None, authors:list[OPDSPerson]=None,
-        threaded=False):
+        threaded=False) -> str:
     """ Returns an OPDS feed of Marked for Later lists for a user. """
     # Log in if a (username, password) pair were provided:
     if not isinstance(session, AO3.Session):
