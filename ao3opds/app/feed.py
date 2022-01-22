@@ -4,7 +4,7 @@ from flask import (
 from werkzeug.exceptions import abort
 from ao3opds.app.db import get_db
 from ao3opds.app.auth import login_required
-from ao3opds.render import fetch_marked_for_later, FEED_AUTHOR
+from ao3opds.render import marked_for_later_opds, FEED_AUTHOR
 import AO3
 
 # Feeds are stale after 5 minutes:
@@ -27,7 +27,7 @@ def render_marked_for_later_feed(session: AO3.Session) -> str:
     """ Generates an OPDS feed for a user's Marked for Later list """
     feed_id = url_for('feed.marked_for_later')
     feed_title = f"{session.username}'s Marked for Later list"
-    feed = fetch_marked_for_later(
+    feed = marked_for_later_opds(
         session, feed_id, feed_title, [FEED_AUTHOR], threaded=True)
     return feed
 

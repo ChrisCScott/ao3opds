@@ -21,7 +21,7 @@ def get_AO3_session(username, password):
         return None
     return session
 
-def fetch_marked_for_later(
+def marked_for_later_opds(
         session: AO3.Session | tuple[str, str],
         id:str=None, title:str=None, authors:list[OPDSPerson]=None,
         threaded=False) -> str:

@@ -5,7 +5,7 @@ import os
 import warnings
 import argparse
 import AO3
-from ao3opds.render import fetch_marked_for_later
+from ao3opds.render import marked_for_later_opds
 from opds import AO3OPDS, OPDSPerson
 
 # Parse command-line arguments:
@@ -39,7 +39,7 @@ except AO3.utils.LoginError as error:
     warnings.warn(f'Could not log in to AO3 as {username}: ' + str(error))
     quit()
 
-feed = fetch_marked_for_later(session)
+feed = marked_for_later_opds(session, threaded=True)
 
 # Print to stdout, leave it to the shell to redirect:
 print(feed)
