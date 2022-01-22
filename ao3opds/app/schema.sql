@@ -27,7 +27,7 @@ CREATE TABLE feed (
   share_key TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
   share_enabled INTEGER NOT NULL DEFAULT 0,
   updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  content TEXT NOT NULL,
+  content TEXT,
   FOREIGN KEY (user_id) REFERENCES user (id),
   FOREIGN KEY (ao3_id) REFERENCES ao3 (id),
   UNIQUE (user_id, feed_type)

@@ -1,5 +1,6 @@
 import datetime
-from flask import Blueprint, g, request, url_for, render_template, Response
+from flask import (
+    Blueprint, g, request, url_for, render_template, Response, flash)
 from werkzeug.exceptions import abort
 from ao3opds.app.db import get_db
 from ao3opds.app.auth import login_required
@@ -39,7 +40,8 @@ def refresh_marked_for_later_feed(
     # If the feed is not stale, return its content without refreshing:
     if (
             not force and
-            feed['updated'] > datetime.datetime.now() - REFRESH_FREQUENCY
+            feed['updated'] > datetime.datetime.now() - REFRESH_FREQUENCY and
+            feed['content'] is not None
         ):
         return feed['content']
     # Otherwise, for a stale feed, update it:
@@ -62,6 +64,31 @@ def refresh_marked_for_later_feed(
         ' WHERE id = ?', (new_feed, feed['id']))
     db.commit()  # Save changes to database
     return new_feed
+
+def prepopulate_feeds(user_id):
+    """ Generates entries in `feeds` for `user_id`. """
+    db = get_db()
+    ao3_id = db.execute(
+        'SELECT id FROM ao3 WHERE user_id = ?', (user_id,)).fetchone()['id']
+    if ao3_id is None:
+        flash(f"User has no AO3 credentials on record.")
+        return
+    # Create each dummy feed with a stale `updated` attribute:
+    updated = datetime.datetime.now() - 2 * REFRESH_FREQUENCY
+    for feed_type in FEED_TYPES:
+        record = db.execute(
+            'SELECT * FROM feed'
+            ' WHERE (feed_type = ? AND user_id = ? AND ao3_id = ?)',
+            (feed_type, user_id, ao3_id)).fetchone()
+        # If we found a record, move on to the next feed type:
+        if record is not None:
+            continue
+        # Add a dummy entry for this user (NULL content):
+        db.execute(
+            'INSERT INTO feed (user_id, ao3_id, feed_type, updated, content)'
+            ' VALUES (?, ?, ?, ?, ?)',
+            (user_id, ao3_id, feed_type, updated, None))
+    db.commit()  # Save changes to database
 
 # We support a few modes here; a user can be logged in, or they can
 # provide their AO3 credentials (as `u` and `p` GET parameters) without
@@ -137,6 +164,9 @@ def manage():
     """ Allows a user to choose to share links and acquire their urls. """
     user_id = g.user['id']
     db = get_db()
+    # Add a feed record for each type of feed so that the user can
+    # configure them:
+    prepopulate_feeds(user_id)
     # User has submitted a form with updated sharing permissions:
     if request.method == 'POST':
         g.feeds = db.execute(
