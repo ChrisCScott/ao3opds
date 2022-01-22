@@ -1,42 +1,44 @@
 import datetime
 from flask import (
-    Blueprint, g, request, url_for, render_template, Response, flash)
+    Blueprint, g, request, render_template, Response, flash)
 from werkzeug.exceptions import abort
 from ao3opds.app.db import get_db
 from ao3opds.app.auth import login_required
-from ao3opds.render import marked_for_later_opds, FEED_AUTHOR
+from ao3opds.render import (
+    bookmarks_opds, marked_for_later_opds, subscriptions_opds, history_opds)
 import AO3
 
 # Feeds are stale after 5 minutes:
 REFRESH_FREQUENCY = datetime.timedelta(minutes=5)
 FEED_TYPE_MARKED_FOR_LATER = "Marked for Later"
+FEED_TYPE_BOOKMARKS = "Bookmarks"
+FEED_TYPE_SUBSCRIPTIONS = "Subscriptions"
+FEED_TYPE_HISTORY = "History"
 # NOTE: Update these if a new feed type is added:
 # This is a mapping of feed types (as represented in the DB) to
 # endpoints that are resolvable to urls via `url_for()`:
-FEED_TYPES = {FEED_TYPE_MARKED_FOR_LATER: 'feed.marked_for_later'}
+FEED_TYPES = {
+    FEED_TYPE_MARKED_FOR_LATER: 'feed.marked_for_later',
+    FEED_TYPE_BOOKMARKS: 'feed.bookmarks',
+    FEED_TYPE_SUBSCRIPTIONS: 'feed.subscriptions',
+    FEED_TYPE_HISTORY: 'feed.history'}
+FEED_FETCH_METHODS = {
+    FEED_TYPE_MARKED_FOR_LATER: marked_for_later_opds,
+    FEED_TYPE_BOOKMARKS: bookmarks_opds,
+    FEED_TYPE_SUBSCRIPTIONS: subscriptions_opds,
+    FEED_TYPE_HISTORY: history_opds}
 FEED_MIME_TYPE = 'text/xml'
 
 blueprint = Blueprint('feed', __name__, url_prefix='/feed')
 
-def render_feed(feed:str) -> Response:
+def feed_view(feed:str) -> Response:
     """ Call this when returning from a view that displays a feed. """
     response = Response(feed, mimetype=FEED_MIME_TYPE)
     return response
 
-def render_marked_for_later_feed(session: AO3.Session) -> str:
-    """ Generates an OPDS feed for a user's Marked for Later list """
-    feed_id = url_for('feed.marked_for_later')
-    feed_title = f"{session.username}'s Marked for Later list"
-    feed = marked_for_later_opds(
-        session, feed_id, feed_title, [FEED_AUTHOR], threaded=True)
-    return feed
-
-def refresh_marked_for_later_feed(
-        feed, session:AO3.Session=None, force:bool=False) -> str:
-    """ Refreshes a cached Marked for Later OPDS feed.
-    
-    Returns the contents of the feed.
-    """
+def refresh_feed(
+        feed, session:AO3.Session=None, force:bool=False, threaded=True) -> str:
+    """ Refreshes a cached OPDS feed. Returns the content of the feed. """
     # If the feed is not stale, return its content without refreshing:
     if (
             not force and
@@ -57,7 +59,9 @@ def refresh_marked_for_later_feed(
             abort(401, "Could not authenticate with AO3: " + str(err))
 
     # Fetch the updated feed:
-    new_feed = render_marked_for_later_feed(session)
+    feed_type = feed['feed_type']
+    fetch_feed = FEED_FETCH_METHODS[feed_type]
+    new_feed = fetch_feed(session, threaded=True)
     # Store the updated feed in the database:
     db.execute(
         'UPDATE feed SET content = ?, updated = CURRENT_TIMESTAMP'
@@ -90,12 +94,14 @@ def prepopulate_feeds(user_id):
             (user_id, ao3_id, feed_type, updated, None))
     db.commit()  # Save changes to database
 
-# We support a few modes here; a user can be logged in, or they can
-# provide their AO3 credentials (as `u` and `p` GET parameters) without
-# having an account:
-@blueprint.route('/', methods=['GET'])
-def marked_for_later():
-    """ An OPDS v. 1.2 feed of a user's AO3 Marked for Later works. """
+def render_feed(feed_type):
+    """ Renders a feed of type `feed_type` based on `fetch_feed`. """
+    # We support a few modes here; a user can be logged in, or they can
+    # provide their AO3 credentials (as `u` and `p` GET parameters)
+    # without having an account:
+
+    fetch_feed = FEED_FETCH_METHODS[feed_type]
+
     # Support anonymous mode:
     if (
             g.ao3_session is None and  # User not logged in
@@ -108,10 +114,10 @@ def marked_for_later():
             session = AO3.Session(ao3_username, ao3_password)
         except AO3.utils.LoginError as err:
             abort(401, "Could not authenticate with AO3: " + str(err))
-        return render_feed(render_marked_for_later_feed(session))
+        return feed_view(fetch_feed(session, threaded=True))
     # Check to see whether there is an active AO3 session:
     elif g.ao3_session is None:  # no logged in user, no credentials:
-        abort(401, "Must authenticate with AO3 to see Marked for Later feed.")
+        abort(401, "Must authenticate with AO3 to view feeds.")
 
     # Ok, if we get here then we must be logged in.
     # Acquire user credentials and other useful data:
@@ -123,24 +129,44 @@ def marked_for_later():
     # Get the cached feed, if it exists:
     feed = db.execute(
         'SELECT * FROM feed WHERE (user_id = ? AND feed_type = ?)',
-        (user_id, FEED_TYPE_MARKED_FOR_LATER)
+        (user_id, feed_type)
     ).fetchone()
 
     # Generate a new feed if there's no cached feed (or if it's old)
     if feed is None:
-        feed = render_marked_for_later_feed(session)
+        feed = fetch_feed(session, threaded=True)
         # Store the feed:
         db.execute(
             'INSERT INTO feed (user_id, ao3_id, feed_type, content)'
             ' VALUES (?, ?, ?, ?)',
-            (user_id, ao3_id, FEED_TYPE_MARKED_FOR_LATER, feed))
+            (user_id, ao3_id, feed_type, feed))
         db.commit()
     else:  # update existing feed if it exists
         # This converts the Row object to a str of the feed's contents:
-        feed = refresh_marked_for_later_feed(feed, session)
+        feed = refresh_feed(feed, session, threaded=True)
 
     # No need to render; `feed` is already a rendered template:
-    return render_feed(feed)
+    return feed_view(feed)
+
+@blueprint.route('/marked_for_later', methods=['GET'])
+def marked_for_later():
+    """ An OPDS v. 1.2 feed of a user's AO3 Marked for Later works. """
+    return render_feed(FEED_TYPE_MARKED_FOR_LATER)
+
+@blueprint.route('/bookmarks', methods=['GET'])
+def bookmarks():
+    """ An OPDS v. 1.2 feed of a user's AO3 bookmarked works. """
+    return render_feed(FEED_TYPE_BOOKMARKS)
+
+@blueprint.route('/subscriptions', methods=['GET'])
+def subscriptions():
+    """ An OPDS v. 1.2 feed of works in a user's AO3 subscriptions. """
+    return render_feed(FEED_TYPE_SUBSCRIPTIONS)
+
+@blueprint.route('/history', methods=['GET'])
+def history():
+    """ An OPDS v. 1.2 feed of a user's AO3 history. """
+    return render_feed(FEED_TYPE_HISTORY)
 
 @blueprint.route('/share/<share_key>')
 def share(share_key):
@@ -154,9 +180,9 @@ def share(share_key):
     if feed is None:
         abort(404, "Feed not found")
     # Refresh the feed if it is old.
-    feed = refresh_marked_for_later_feed(feed)
+    feed = refresh_feed(feed)
     # Otherwise, return the feed's contents:
-    return render_feed(feed)
+    return feed_view(feed)
 
 @blueprint.route('/manage', methods=['GET', 'POST'])
 @login_required
