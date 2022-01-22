@@ -18,6 +18,11 @@
             Manage AO3 Credentials
         </a>
     </div>
+    <div>
+        <a class="action" href="{{ url_for('feed.manage') }}">
+            Manage OPDS Feeds
+        </a>
+    </div>
     {% else %}
     <div>
         <a class="action" href="{{ url_for('auth.login') }}">Login</a>

@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+
+{% block header %}
+  <h1>{% block title %}Manage AO3 Feeds{% endblock %}</h1>
+{% endblock %}
+
+{% block content %}
+  {% if g.feeds %}
+  <form method="post">
+    <table>
+      <tr>
+        <th><h2>Feed</h2></th>
+        <th><h2>Shareable?</h2></th>
+        <th><h2>Share Link</h2></th>
+      </tr>
+      {% for feed in g.feeds %}
+      <tr>
+        <th>{{ feed['feed_type'] }}</th>
+        <th><input type="checkbox" name="{{ feed['share_key'] }}" value="{{ feed['share_key'] }}"{% if feed['share_enabled'] %} checked{% endif %}></th>
+        <th>
+          {% if feed['share_enabled'] %}
+          <a href="{{ url_for('feed.share', share_key=feed['share_key']) }}">Shareable link</a>
+          {% else %}
+          Not shared
+          {% endif %}
+        </th>
+      </tr>
+      {% endfor %}
+    </table>
+    <input type="submit" name="submit_button" value="Update">
+  </form>
+  {% elif g.user %}
+  <div>No feeds associated with user {{ g.user['username'] }}</div>
+  {% else %}
+  <div>You must be logged in to manage feeds.</div>
+  {% endif %}
+{% endblock %}

@@ -1,14 +1,16 @@
 import datetime
-from flask import Blueprint, g, request, url_for
+from operator import ge
+from flask import Blueprint, g, request, url_for, render_template
 from werkzeug.exceptions import abort
 from ao3opds.app.db import get_db
-from ao3opds.app.ao3 import REFRESH_FREQUENCY, ao3_session_required
+from ao3opds.app.auth import login_required
+from ao3opds.app.ao3 import REFRESH_FREQUENCY, refresh_session
 from ao3opds.marked_for_later_opds import get_marked_for_later_opds, FEED_AUTHOR
 import AO3
 
 # Feeds are stale after 5 minutes:
 REFRESH_FREQUENCY = datetime.timedelta(minutes=5)
-FEED_TYPE_MARKED_FOR_LATER = "marked_for_later"
+FEED_TYPE_MARKED_FOR_LATER = "Marked for Later"
 
 blueprint = Blueprint('feed', __name__, url_prefix='/feed')
 
@@ -19,6 +21,39 @@ def render_marked_for_later_feed(session: AO3.Session):
     feed = get_marked_for_later_opds(
         session, feed_id, feed_title, [FEED_AUTHOR])
     return feed
+
+def refresh_marked_for_later_feed(
+        feed, session:AO3.Session=None, force:bool=False) -> str:
+    """ Refreshes a cached Marked for Later OPDS feed.
+    
+    Returns the contents of the feed.
+    """
+    # If the feed is not stale, return its content without refreshing:
+    if (
+            not force and
+            feed['updated'] > datetime.datetime.now() - REFRESH_FREQUENCY
+        ):
+        return feed['content']
+    # Otherwise, for a stale feed, update it:
+    db = get_db()
+    # First authenticate with AO3:
+    if session is None:
+        ao3 = db.execute(
+            'SELECT username, password FROM ao3 WHERE id = ?',
+            (feed['ao3_id'],)).fetchone()
+        try:
+            session = AO3.Session(ao3['username'], ao3['password'])
+        except AO3.utils.LoginError as err:
+            abort(401, "Could not authenticate with AO3: " + str(err))
+
+    # Fetch the updated feed:
+    new_feed = render_marked_for_later_feed(session)
+    # Store the updated feed in the database:
+    db.execute(
+        'UPDATE feed SET (content = ?, updated = CURRENT_TIMESTAMP)'
+        ' WHERE id = ?', (new_feed, feed['id']))
+    db.commit()  # Save changes to database
+    return new_feed
 
 # We support a few modes here; a user can be logged in, or they can
 # provide their AO3 credentials (as `u` and `p` GET parameters) without
@@ -57,24 +92,56 @@ def marked_for_later():
     ).fetchone()
 
     # Generate a new feed if there's no cached feed (of if it's old)
-    if (
-            feed is None or
-            feed['updated'] < datetime.datetime.now() - REFRESH_FREQUENCY
-        ):
-        # Refresh the feed:
-        new_feed = render_marked_for_later_feed(session)
+    if feed is None:
+        feed = render_marked_for_later_feed(session)
         # Store the feed:
-        if feed is None:  # insert new feed if no existing feed
-            db.execute(
-                'INSERT INTO feed (user_id, ao3_id, feed_type, content)'
-                ' VALUES (?, ?, ?, ?)',
-                (user_id, ao3_id, FEED_TYPE_MARKED_FOR_LATER, new_feed))
-        else:  # update existing feed if it exists
-            db.execute(
-                'UPDATE feed SET (content = ?, updated = CURRENT_TIMESTAMP)'
-                ' WHERE id = ?', (new_feed, feed['id']))
-        # Replace the old feed with the new feed, to show to the user:
-        feed = new_feed
+        db.execute(
+            'INSERT INTO feed (user_id, ao3_id, feed_type, content)'
+            ' VALUES (?, ?, ?, ?)',
+            (user_id, ao3_id, FEED_TYPE_MARKED_FOR_LATER, feed))
+        db.commit()
+    else:  # update existing feed if it exists
+        # This converts the Row object to a str of the feed's contents:
+        feed = refresh_marked_for_later_feed(feed, session)
 
     # No need to render; `feed` is already a rendered template:
     return feed
+
+@blueprint.route('/share/<share_key>')
+def share(share_key):
+    """ Returns an OPDS feed with sharing enabled """
+    db = get_db()
+    # Look up the feed with `share_key`:
+    feed = db.execute(
+        'SELECT * from feed WHERE (share_key = ? AND share_enabled = 1)',
+        (share_key,)).fetchone()
+    # If there's no shareable feed with that key, return an error:
+    if feed is None:
+        abort(404, "Feed not found")
+    # Refresh the feed if it is old.
+    feed = refresh_marked_for_later_feed(feed)
+    # Otherwise, return the feed's contents:
+    return feed
+
+@blueprint.route('/manage', methods=['GET', 'POST'])
+@login_required
+def manage():
+    """ Allows a user to choose to share links and acquire their urls. """
+    user_id = g.user['id']
+    db = get_db()
+    # User has submitted a form with updated sharing permissions:
+    if request.method == 'POST':
+        g.feeds = db.execute(
+            'SELECT * FROM feed WHERE user_id = ?', (user_id,)).fetchall()
+        # For each feed, set the `share_enabled` property based on
+        # whether the checkbox in the form was checked:
+        for feed in g.feeds:
+            share_enabled = 1 if request.form.get(feed['share_key']) else 0
+            db.execute(
+                'UPDATE feed SET share_enabled = ? WHERE share_key = ?',
+                (share_enabled, feed['share_key']))
+        db.commit()
+    # Get the list of feeds (as updated, if applicable) and render:
+    g.feeds = db.execute(
+        'SELECT * FROM feed WHERE user_id = ?', (user_id,)).fetchall()
+    return render_template('feed/manage.html')
