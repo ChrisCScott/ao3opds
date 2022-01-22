@@ -60,7 +60,7 @@ def refresh_marked_for_later_feed(
     new_feed = render_marked_for_later_feed(session)
     # Store the updated feed in the database:
     db.execute(
-        'UPDATE feed SET (content = ?, updated = CURRENT_TIMESTAMP)'
+        'UPDATE feed SET content = ?, updated = CURRENT_TIMESTAMP'
         ' WHERE id = ?', (new_feed, feed['id']))
     db.commit()  # Save changes to database
     return new_feed
@@ -99,7 +99,7 @@ def marked_for_later():
     # Support anonymous mode:
     if (
             g.ao3_session is None and  # User not logged in
-            request.args.get['u'] and request.args.get['p'] # Credentials provided
+            request.args.get('u') and request.args.get('p') # Credentials provided
         ):
         # Spin up an anonymous session:
         ao3_username = request.args.get['u']
@@ -111,7 +111,7 @@ def marked_for_later():
         return render_feed(render_marked_for_later_feed(session))
     # Check to see whether there is an active AO3 session:
     elif g.ao3_session is None:  # no logged in user, no credentials:
-        abort(401, "Must be logged in to see Marked for Later feed.")
+        abort(401, "Must authenticate with AO3 to see Marked for Later feed.")
 
     # Ok, if we get here then we must be logged in.
     # Acquire user credentials and other useful data:
