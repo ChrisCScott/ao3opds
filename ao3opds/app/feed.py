@@ -1,18 +1,22 @@
 import datetime
-from operator import ge
-from flask import Blueprint, g, request, url_for, render_template
+from flask import Blueprint, g, request, url_for, render_template, Response
 from werkzeug.exceptions import abort
 from ao3opds.app.db import get_db
 from ao3opds.app.auth import login_required
-from ao3opds.app.ao3 import REFRESH_FREQUENCY, refresh_session
 from ao3opds.marked_for_later_opds import get_marked_for_later_opds, FEED_AUTHOR
 import AO3
 
 # Feeds are stale after 5 minutes:
 REFRESH_FREQUENCY = datetime.timedelta(minutes=5)
 FEED_TYPE_MARKED_FOR_LATER = "Marked for Later"
+FEED_MIME_TYPE = 'text/xml'
 
 blueprint = Blueprint('feed', __name__, url_prefix='/feed')
+
+def render_feed(feed:str):
+    """ Call this when returning from a view that displays a feed. """
+    response = Response(feed, mimetype=FEED_MIME_TYPE)
+    return response
 
 def render_marked_for_later_feed(session: AO3.Session):
     """ Generates an OPDS feed for a user's Marked for Later list """
@@ -73,7 +77,7 @@ def marked_for_later():
             session = AO3.Session(ao3_username, ao3_password)
         except AO3.utils.LoginError as err:
             abort(401, "Could not authenticate with AO3: " + str(err))
-        return render_marked_for_later_feed(session)
+        return render_feed(render_marked_for_later_feed(session))
     # Check to see whether there is an active AO3 session:
     elif g.ao3_session is None:  # no logged in user, no credentials:
         abort(401, "Must be logged in to see Marked for Later feed.")
@@ -105,7 +109,7 @@ def marked_for_later():
         feed = refresh_marked_for_later_feed(feed, session)
 
     # No need to render; `feed` is already a rendered template:
-    return feed
+    return render_feed(feed)
 
 @blueprint.route('/share/<share_key>')
 def share(share_key):
@@ -121,7 +125,7 @@ def share(share_key):
     # Refresh the feed if it is old.
     feed = refresh_marked_for_later_feed(feed)
     # Otherwise, return the feed's contents:
-    return feed
+    return render_feed(feed)
 
 @blueprint.route('/manage', methods=['GET', 'POST'])
 @login_required
