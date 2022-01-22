@@ -8,6 +8,7 @@ from flask import (
 from werkzeug.exceptions import HTTPException
 from ao3opds.app.db import get_db
 from ao3opds.app.auth import login_required
+from ao3opds.app.feed import prepopulate_feeds
 import AO3
 
 # The frequency with which the user's AO3 session is refreshed:
@@ -97,6 +98,9 @@ def set_credentials(username, password):
             " VALUES (?, ?, ?, ?)",
             (user_id, username, password, dump_ao3_session(session)))
         db.commit()  # Save changes to db file
+        # Prepopulate `feed` table with no-content feeds so that the
+        # user can manage their sharing permissions:
+        prepopulate_feeds(user_id)
         return
     # If AO3 credentials were found, we need to update, not insert:
     db.execute(
