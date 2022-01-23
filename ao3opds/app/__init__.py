@@ -55,11 +55,14 @@ def create_app(test_config=None):
 # Installing Python WSGI application via cPanel:
 # https://docs.cpanel.net/knowledge-base/web-services/how-to-install-a-python-wsgi-application/
 #
-# Flast tutorial, including example user authentication setup:
+# Flask tutorial, including example user authentication setup:
 # https://flask.palletsprojects.com/en/2.0.x/tutorial/
 #
 # Tips for getting Python to execute properly on Bluehost:
 # https://stackoverflow.com/questions/63982125/running-python-script-on-website-displays-source-code
+#
+# Tips for running Flask apps on Bluehost:
+# https://gist.github.com/peteristhegreat/1191833d40185cd6652eae89d669b54d
 #
 # Authentication for OPDS (Draft)
 # If implementing this, we may want to consider adopting OPDS 2.0,
