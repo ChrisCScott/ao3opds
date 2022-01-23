@@ -64,6 +64,9 @@ def create_app(test_config=None):
 # Tips for running Flask apps on Bluehost:
 # https://gist.github.com/peteristhegreat/1191833d40185cd6652eae89d669b54d
 #
+# Tips for running a Flask app over HTTPS:
+# https://blog.miguelgrinberg.com/post/running-your-flask-application-over-https
+#
 # Authentication for OPDS (Draft)
 # If implementing this, we may want to consider adopting OPDS 2.0,
 # which is JSON-based (as is this draft spec)
