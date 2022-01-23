@@ -86,6 +86,9 @@ setup(
     # For an analysis of "install_requires" vs pip's requirements files see:
     # https://packaging.python.org/en/latest/requirements.html
     install_requires=[
+        'ao3-api>=2',
+        'Flask>=2',
+        'Jinja2>=3',
     ],  # Optional
 
     # List additional groups of dependencies here (e.g. development
