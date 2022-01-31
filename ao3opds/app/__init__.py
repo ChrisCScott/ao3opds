@@ -51,23 +51,3 @@ def create_app(test_config=None):
     app.add_url_rule('/', endpoint='index')
 
     return app
-
-# Installing Python WSGI application via cPanel:
-# https://docs.cpanel.net/knowledge-base/web-services/how-to-install-a-python-wsgi-application/
-#
-# Flask tutorial, including example user authentication setup:
-# https://flask.palletsprojects.com/en/2.0.x/tutorial/
-#
-# Tips for getting Python to execute properly on Bluehost:
-# https://stackoverflow.com/questions/63982125/running-python-script-on-website-displays-source-code
-#
-# Tips for running Flask apps on Bluehost:
-# https://gist.github.com/peteristhegreat/1191833d40185cd6652eae89d669b54d
-#
-# Tips for running a Flask app over HTTPS:
-# https://blog.miguelgrinberg.com/post/running-your-flask-application-over-https
-#
-# Authentication for OPDS (Draft)
-# If implementing this, we may want to consider adopting OPDS 2.0,
-# which is JSON-based (as is this draft spec)
-# https://drafts.opds.io/authentication-for-opds-1.0.html
