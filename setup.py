@@ -18,7 +18,7 @@ setup(
     # For a discussion on single-sourcing the version across setup.py and the
     # project code, see
     # https://packaging.python.org/en/latest/single_source_version.html
-    version='0.0.1a1',  # Required
+    version='0.0.1a2',  # Required
 
     # A one-line description of what this project does.
     description='A tool for generating OPDS feeds of AO3 works',  # Optional
