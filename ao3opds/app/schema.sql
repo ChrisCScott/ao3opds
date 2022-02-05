@@ -32,3 +32,71 @@ CREATE TABLE feed (
   FOREIGN KEY (ao3_id) REFERENCES ao3 (id),
   UNIQUE (user_id, feed_type)
 );
+
+CREATE TABLE feed_entry (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  feed_id INTEGER NOT NULL,
+  work_id INTEGER NOT NULL,
+  updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (feed_id) REFERENCES feed (id),
+  FOREIGN KEY (work_id) REFERENCES work (id),
+  UNIQUE (feed_id, work_id)
+);
+
+CREATE TABLE author (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  email TEXT,
+  uri TEXT,
+  updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE category (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  term TEXT NOT NULL,
+  scheme TEXT,
+  label TEXT,
+  updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE work_author (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  work_id INTEGER NOT NULL,
+  author_id INTEGER NOT NULL,
+  updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (work_id) REFERENCES work (id),
+  FOREIGN KEY (author_id) REFERENCES author (id),
+  UNIQUE (work_id, author_id)
+)
+
+CREATE TABLE work_category (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  work_id INTEGER NOT NULL,
+  category_id INTEGER NOT NULL,
+  updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (work_id) REFERENCES work (id),
+  FOREIGN KEY (category_id) REFERENCES category (id),
+  UNIQUE (work_id, category_id)
+)
+
+CREATE TABLE work (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  work_id INTEGER NOT NULL,
+  title TEXT NOT NULL,
+  work_updated TIMESTAMP NOT NULL,
+  rights TEXT,
+  work_language TEXT,
+  publisher TEXT,
+  summary TEXT,
+  updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE link (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  work_id INTEGER NOT NULL,
+  href TEXT NOT NULL,
+  rel TEXT,
+  link_type TEXT,
+  updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (work_id) REFERENCES work (id)
+)
