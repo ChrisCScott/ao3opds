@@ -1,11 +1,10 @@
-import pickle
 import datetime
 import functools
 from flask import (
     Blueprint, flash, g, redirect, render_template, request, url_for,
     abort, session)
 from werkzeug.exceptions import HTTPException
-from ao3opds.app.db import get_db
+from ao3opds.app.db import get_db, load_ao3_session, dump_ao3_session
 from ao3opds.app.auth import login_required
 from ao3opds.app.feed import prepopulate_feeds
 import AO3
@@ -54,14 +53,6 @@ def ao3_session_required(view):
     wrapped_view = login_required(wrapped_view)
 
     return wrapped_view
-
-def load_ao3_session(blob: bytes, update=True) -> AO3.Session:
-    """ Converts a blob pulled from the database to an AO3.Session. """
-    return pickle.loads(blob)
-
-def dump_ao3_session(session: AO3.Session) -> bytes:
-    """ Converts an AO3.Session to a blob for storage in the database. """
-    return pickle.dumps(session, pickle.HIGHEST_PROTOCOL)
 
 def refresh_session(force=False):
     """ Refreshes the AO3.Session for the current user. """
