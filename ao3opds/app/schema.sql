@@ -22,14 +22,11 @@ CREATE TABLE ao3 (
 CREATE TABLE feed (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL,
-  ao3_id INTEGER NOT NULL,
   feed_type TEXT NOT NULL,
   share_key TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
   share_enabled INTEGER NOT NULL DEFAULT 0,
   updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  content TEXT,
   FOREIGN KEY (user_id) REFERENCES user (id),
-  FOREIGN KEY (ao3_id) REFERENCES ao3 (id),
   UNIQUE (user_id, feed_type)
 );
 
