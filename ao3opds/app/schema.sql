@@ -30,6 +30,26 @@ CREATE TABLE feed (
   UNIQUE (user_id, feed_type)
 );
 
+CREATE TABLE category (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  term TEXT NOT NULL,
+  scheme TEXT,
+  label TEXT,
+  updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE work (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  work_id INTEGER NOT NULL,
+  title TEXT NOT NULL,
+  work_updated TIMESTAMP NOT NULL,
+  rights TEXT,
+  work_language TEXT,
+  publisher TEXT,
+  summary TEXT,
+  updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE feed_entry (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   feed_id INTEGER NOT NULL,
@@ -45,14 +65,6 @@ CREATE TABLE author (
   name TEXT NOT NULL,
   email TEXT,
   uri TEXT,
-  updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE category (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  term TEXT NOT NULL,
-  scheme TEXT,
-  label TEXT,
   updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -75,18 +87,6 @@ CREATE TABLE work_category (
   FOREIGN KEY (category_id) REFERENCES category (id),
   UNIQUE (work_id, category_id)
 )
-
-CREATE TABLE work (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  work_id INTEGER NOT NULL,
-  title TEXT NOT NULL,
-  work_updated TIMESTAMP NOT NULL,
-  rights TEXT,
-  work_language TEXT,
-  publisher TEXT,
-  summary TEXT,
-  updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
 
 CREATE TABLE link (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
