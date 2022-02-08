@@ -1,24 +1,32 @@
 ''' Methods for sending tasks to the Celery worker process.
 
-This is a standard pattern for supporting background tasks in a Flask
-app via Celery. For more information, see the Flask documentation:
+This module provides background tasks to be run via Celery.
+
+Typical usage will be: A method running in a Flask webserver process
+will invoke `methodname_async` to cause the `methodname` task to be
+executed asynchronously in a worker process. (`methodname` can be
+executed synchronously if desired by calling it directly.)
+
+For more information, see:
 https://flask.palletsprojects.com/en/2.0.x/patterns/celery/
-See also this helpful primer:
 https://blog.miguelgrinberg.com/post/celery-and-the-flask-application-factory-pattern
+https://docs.celeryproject.org/en/3.1/userguide/calling.html
 '''
 
 import datetime
+import enum
 from typing import Any
 import AO3
+from . import celery
 from ao3opds.opds import AO3WorkOPDS, OPDSPerson, OPDSCategory, OPDSLink
-from ao3opds.app.db import get_db, load_ao3_session, dump_ao3_session
+from ao3opds.app.db import get_db, dump_ao3_session
 from ao3opds.app.feed import (
     FEED_TYPE_BOOKMARKS, FEED_TYPE_HISTORY, FEED_TYPE_MARKED_FOR_LATER,
-    FEED_TYPE_SUBSCRIPTIONS)
-from . import celery
+    FEED_TYPE_SUBSCRIPTIONS, FEED_TYPES)
 
-HIGH_PRIORITY = 2
-LOW_PRIORITY = 1
+# Define task priority levels:
+HIGH_PRIORITY = 2  # Tasks requested by the webserver
+LOW_PRIORITY = 1  # Tasks performed by background updater
 
 # Update users and works daily. Update feeds more frequently.
 USER_UPDATE_FREQUENCY = datetime.timedelta(days=1)
@@ -29,25 +37,19 @@ WORK_UPDATE_FREQUENCY = datetime.timedelta(days=1)
 # (indexed at 0, so a value of 20 means 21 pages will be loaded.)
 MAX_PAGES_DEFAULT = 20
 
-# The pattern here splits every task into two methods: a method that
-# runs synchronously in the Flask app's process and a method that runs
-# asynchronously in the Celery worker's process.
-#
-# The Celery process method has a `@celery.task` decorator and, by
-# convention, has a name of the form `methodname_async`.
+class FetchMode(enum.Enum):
+    NO_FETCH = 0
+    UPDATE_STALE = 1
+    FORCE = 2
 
-@celery.task
-def fetch_user_async(
-        user_id, ao3_username, ao3_password,
-        session=None, fetch_all=True, force=False, priority=HIGH_PRIORITY):
-    """ Authenticates a user and stores credentials to the database. """
+FETCH_MODES_DEFAULT = {
+    'USER': FetchMode.UPDATE_STALE,
+    'FEED': FetchMode.UPDATE_STALE,
+    'WORK': FetchMode.UPDATE_STALE}
+
+def ao3_user_to_db(user_id, ao3_username, ao3_password, session):
+    """ Creates or updates an ao3 user record in the database """
     db = get_db()
-
-    # Attempt to authenticate with AO3:
-    # raises `AO3.utils.LoginError`
-    if session is None or force:
-        session = AO3.Session(ao3_username, ao3_password)
-    # TODO: Handle failure.
 
     # Get the existing record, if any:
     user_record = db.execute(
@@ -66,26 +68,64 @@ def fetch_user_async(
             (user_id, ao3_username, ao3_password, dump_ao3_session(session)))
     db.commit()  # Save changes to file
 
-    # TODO: Check to see if the AO3 user account changed. If it did,
-    # don't delete the feeds - instead, force updates (via a new `force`
-    # parameter to `fetch_feeds` and related methods).
+    new_user_record = db.execute(
+        "SELECT * FROM ao3 WHERE user_id = ?", (user_id,)).fetchone()
 
-    if fetch_all:
-        for feed_type in FEED_FETCH_METHODS:
-            fetch_feed(session, user_id, feed_type, fetch_all, priority)
+    return (user_record, new_user_record)
+
+@celery.task(bind=True)
+def fetch_ao3_user(
+        self, user_id, ao3_username, ao3_password, session=None,
+        fetch_modes=FETCH_MODES_DEFAULT, priority=HIGH_PRIORITY):
+    """ Authenticates a user and stores credentials to the database. """
+    db = get_db()
+
+    # Halt if we're being told not to fetch the user.
+    if fetch_modes['USER'] == FetchMode.NO_FETCH:
+        return session
+
+    # Attempt to authenticate with AO3:
+    # raises `AO3.utils.LoginError`
+    if session is None or fetch_modes['USER'] == FetchMode.FORCE:
+        session = AO3.Session(ao3_username, ao3_password)
+    # TODO: Handle failure.
+
+    # Create/update ao3 user record:
+    (old_user_record, new_user_record) = ao3_user_to_db(
+        user_id, ao3_username, ao3_password, session)
+    ao3_user_id = new_user_record['id']
+
+    # Check to see if the AO3 user account changed. If it did, don't
+    # delete the feeds - instead, force updates on the feed.
+    if (
+            old_user_record is not None and
+            old_user_record['user_id'] != ao3_username):
+        fetch_modes = dict(fetch_modes)  # don't mutate input dict
+        fetch_modes['FEED'] = FetchMode.FORCE
+
+    # Fetch feeds for this user.
+    # If this method was called asynchronously, generate a new async
+    # task for each feed. Otherwise, iterate synchronously.
+    if self.request.called_directly:
+        fetch_feed_method = fetch_feed
+    else:
+        fetch_feed_method = fetch_feed_async
+    for feed_type in FEED_TYPES:
+        fetch_feed_method(
+            session, ao3_user_id, feed_type,
+            fetch_modes=fetch_modes, priority=priority)
 
     return session
 
-def fetch_user(
+def fetch_ao3_user_async(
         user_id, ao3_username, ao3_password,
-        session=None, fetch_all=True, force=False, priority=HIGH_PRIORITY):
+        session=None, fetch_modes=FETCH_MODES_DEFAULT, priority=HIGH_PRIORITY):
     """ Authenticates and stores a user's credentials asynchronously. """
     # NOTE: Can preprocess paramters here, e.g. by serializing `session`
-    return fetch_user_async.apply_async(
+    return fetch_ao3_user.apply_async(
         args=(user_id, ao3_username, ao3_password),
         kwargs={
-            'session':session, 'fetch_all':fetch_all, 'force':force,
-            'priority':priority},
+            'session':session, 'fetch_modes':fetch_modes, 'priority':priority},
         # TODO: Add other async params, e.g. retry (or define in decorator?)
         priority=priority)
 
@@ -131,33 +171,29 @@ def match_works_to_records(
                 break
     return (matched, unmatched_records, unmatched_works)
 
-@celery.task
-def fetch_feed_async(
-        session: AO3.Session, user_id, feed_type,
-        fetch_all=True, force=False, priority=HIGH_PRIORITY):
-    """ Fetches a feed for an authenticated user. """
+def feed_to_db(ao3_user_id, feed_type):
+    """ Gets a feed record from the database, creating it if needed. """
     db = get_db()
-    update_threshold = datetime.datetime.now() - FEED_UPDATE_FREQUENCY
-
-    # Check for existing record of this feed_type for this user_id:
+    # Check for an existing record:
     feed_record = db.execute(
         'SELECT * FROM feed WHERE (user_id = ? and feed_type = ?)',
-        (user_id, feed_type)).fetchone()
+        (ao3_user_id, feed_type)).fetchone()
+    if feed_record is not None:
+        return (feed_record, False)  # not updated
     # If the record doesn't exist, create it and then grab its id:
-    if feed_record is None:
-        db.execute(
-            'INSERT INTO feed (user_id, feed_type) VALUES (?, ?)',
-            (user_id, feed_type))
-        db.commit()  # Save changes
-        feed_record = db.execute(
-            'SELECT * FROM feed WHERE (user_id = ? and feed_type = ?)',
-            (user_id, feed_type)).fetchone()
-    # If it exists and was recently updated, skip it:
-    elif feed_record['updated'] > update_threshold and not force:
-        return session
+    db.execute(
+        'INSERT INTO feed (user_id, feed_type) VALUES (?, ?)',
+        (ao3_user_id, feed_type))
+    db.commit()  # Save changes
+    # Grab the updated record:
+    feed_record = db.execute(
+        'SELECT * FROM feed WHERE (user_id = ? and feed_type = ?)',
+        (ao3_user_id, feed_type)).fetchone()
+    return (feed_record, True)  # updated
 
-    # Store this value for convenience:
-    feed_id = feed_record['id']
+def update_feed_works(session, feed_type, feed_id, fetch_modes, priority):
+    """ Removes """
+    db = get_db()
 
     # Get the set of works for this feed from AO3:
     # TODO: Send this to a different task? If we fail on load, this task
@@ -187,22 +223,57 @@ def fetch_feed_async(
     db.commit()
 
     # If we're fetching everything, don't skip existing works:
-    if fetch_all:
+    # TODO: Think about this. Should we include works already associated
+    # with the feed in the update if (a) feed is set to UPDATE,
+    # (b) feed is set to FORCE, (c) work is set to UPDATE,
+    # (d) work is set to FORCE, or (e) always?
+    if fetch_modes['WORK'] == FetchMode.FORCE:
         unmatched_works.update(matched.values())
+
     # Add new (and maybe existing) works to this feed:
     for work in unmatched_works:
         # Spawn a task for each work:
-        fetch_work(session, feed_id, work.id, force=force, priority=priority)
+        fetch_work(
+            session, feed_id, work.id,
+            fetch_modes=fetch_modes, priority=priority)
+
+@celery.task
+def fetch_feed(
+        session: AO3.Session, ao3_user_id, feed_type,
+        fetch_modes=FETCH_MODES_DEFAULT, priority=HIGH_PRIORITY):
+    """ Fetches a feed for an authenticated user. """
+    db = get_db()
+    update_threshold = datetime.datetime.now() - FEED_UPDATE_FREQUENCY
+
+    # Check for existing record of this feed_type for this user_id:
+    feed_record, feed_is_new = feed_to_db(ao3_user_id, feed_type)
+    # If it exists and was recently updated, skip it:
+    if (
+            not feed_is_new and
+            feed_record['updated'] > update_threshold and
+            fetch_modes['FEED'] != FetchMode.FORCE):
+        return session
+
+    # Store this value for convenience:
+    feed_id = feed_record['id']
+
+    # Update the db records of works for this feed:
+    update_feed_works(session, feed_type, feed_id, fetch_modes, priority)
+
+    # The feed has been updated, so update its record accordingly:
+    db.execute(
+        "UPDATE feed SET updated = CURRENT_TIMESTAMP WHERE feed_id = ?",
+        (feed_id,))
 
     return session
 
-def fetch_feed(
-        session, user_id, feed_type,
-        fetch_all=True, force=False, priority=HIGH_PRIORITY):
+def fetch_feed_async(
+        session, ao3_user_id, feed_type,
+        fetch_modes=FETCH_MODES_DEFAULT, priority=HIGH_PRIORITY):
     """ Fetches a feed for an authenticated user. """
     # NOTE: Can preprocess parameters here, e.g. by serializing `session`
-    return fetch_feed_async.apply_async(
-        (session, user_id, feed_type, fetch_all, priority),
+    return fetch_feed.apply_async(
+        (session, ao3_user_id, feed_type, fetch_modes, priority),
         # TODO: Add other async params, e.g. retry (or define in decorator?)
         priority=priority)
 
@@ -305,7 +376,7 @@ def work_to_db(work: AO3.Work, work_id=None):
     return work_record
 
 @celery.task
-def fetch_work_async(session, feed_id, ao3_work_id, force=False):
+def fetch_work(session, feed_id, ao3_work_id, fetch_modes=FETCH_MODES_DEFAULT):
     """ Fetches a work for a feed using an authenticated user session. """
     db = get_db()
     update_threshold = datetime.datetime.now() - FEED_UPDATE_FREQUENCY
@@ -315,14 +386,17 @@ def fetch_work_async(session, feed_id, ao3_work_id, force=False):
         'SELECT * FROM work WHERE work_id = ?',(ao3_work_id,)).fetchone()
 
     # If the work exists, ensure that it is associated with the feed:
-    # (We do this now to avoid)
+    # (We do this now to avoid dataloss if we fail to load the work)
     if work_record is not None:
         feed_entry_record = link_work_to_feed(work_record['id'], feed_id)
     else:
         feed_entry_record = None
 
-    # If the work exists and was recently updated skip it:
-    if work_record is not None and work_record['updated'] > update_threshold:
+    # If the work exists and was recently updated, skip it:
+    if (
+            work_record is not None and
+            work_record['updated'] > update_threshold and
+            fetch_modes['WORK'] != FetchMode.FORCE):
         return session
 
     # Load an AO3.Work for `work_id` using `session`
@@ -330,20 +404,24 @@ def fetch_work_async(session, feed_id, ao3_work_id, force=False):
     work = AO3.Work(
         ao3_work_id, session=session, load=True, load_chapters=False)
 
-    # Add work record to the database. Need to update if there's
-    # an existing record, or insert if no such record exists.
-    if work_record is None: # Insert if no existing record
-        pass
-    # TODO: Add records to category, author, and link tables, and relate
-    # this work to them via work_author and work_category tables.
-    pass
+    # Add work record to the database.
+    # (This also adds dependent author/category/link records)
+    work_id = work_record['id'] if work_record is not None else None
+    work_record = work_to_db(work, work_id)
 
-def fetch_work(
-        session, feed_id, ao3_work_id, force=False, priority=HIGH_PRIORITY):
+    # If the work is newly-added, link it to the feed:
+    if feed_entry_record is None:
+        link_work_to_feed(work_record['id'], feed_id)
+
+    return session
+
+def fetch_work_async(
+        session, feed_id, ao3_work_id,
+        fetch_modes=FETCH_MODES_DEFAULT, priority=HIGH_PRIORITY):
     """ Fetches a work for a feed using an authenticated user session. """
     # NOTE: Can preprocess parameters here, e.g. by serializing `session`
-    return fetch_work_async.apply_async(
+    return fetch_work.apply_async(
         args=(session, feed_id, ao3_work_id),
-        kwargs={'force':force},
+        kwargs={'fetch_modes':fetch_modes},
         # TODO: Add other async params, e.g. retry (or define in decorator?)
         priority=priority)
