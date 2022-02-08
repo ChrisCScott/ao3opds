@@ -10,6 +10,7 @@ https://blog.miguelgrinberg.com/post/celery-and-the-flask-application-factory-pa
 import datetime
 from typing import Any
 import AO3
+from ao3opds.opds import AO3WorkOPDS, OPDSPerson, OPDSCategory, OPDSLink
 from ao3opds.app.db import get_db, load_ao3_session, dump_ao3_session
 from ao3opds.app.feed import (
     FEED_TYPE_BOOKMARKS, FEED_TYPE_HISTORY, FEED_TYPE_MARKED_FOR_LATER,
@@ -205,27 +206,144 @@ def fetch_feed(
         # TODO: Add other async params, e.g. retry (or define in decorator?)
         priority=priority)
 
+def link_work_to_feed(work_id, feed_id):
+    """ Creates or updates a `feed_entry` row to link a work to a feed.
+    
+    Note that `work_id` references the `id` field of the `work` table
+    (not `work.work_id`!)
+    """
+    db = get_db()
+    # Look for an existing linking record:
+    feed_entry_record = db.execute(
+        'SELECT * from feed_entry WHERE (work_id = ?, feed_id = ?)',
+        (work_id, feed_id)).fetchone()
+    # If no existing record, insert one:
+    if feed_entry_record is None:
+        db.execute(
+            'INSERT INTO feed_entry (feed_id, work_id) VALUES (?, ?)',
+            (feed_id, work_id))
+    # If there is an existing record, update it:
+    else:
+        db.execute(
+            'UPDATE feed_entry SET updated = CURRENT_TIMESTAMP '
+            'WHERE (work_id = ? AND feed_id = ?)',
+            (work_id, feed_id))
+    db.commit()
+    # Return Collect the new/updated record to return to the user:
+    return db.execute(
+        'SELECT * FROM feed_entry WHERE (work_id = ?, feed_id = ?)',
+        (work_id, feed_id)).fetchone()
+
+def link_author_to_work(author: OPDSPerson, work_id):
+    """ Links an author record to a work record in the database. """
+    db = get_db()
+    # Look for an existing author record matching this author:
+    author_record = db.execute(
+        'SELECT * FROM author WHERE (name = ?, email = ?, uri = ?)',
+        (author.name, author.email, author.uri)).fetchone()
+    # TODO: If no existing record, insert one:
+    # TODO: If there is an existing record, update it:
+    # TODO: Look for an existing linking record connecting this author
+    # to this work.
+    # TODO: Add a linking record if one does not yet exist:
+
+def link_category_to_work(category: OPDSCategory, work_id):
+    """ Links a category record to a work record in the database. """
+    db = get_db()
+    # Look for an existing category record matching this category:
+    category_record = db.execute(
+        'SELECT * FROM category WHERE (term = ?, scheme = ?, label = ?)',
+        (category.term, category.scheme, category.label)).fetchone()
+    # TODO: If no existing record, insert one:
+    # TODO: If there is an existing record, update it:
+    # TODO: Look for an existing linking record connecting this category
+    # to this work.
+    # TODO: Add a linking record if one does not yet exist:
+
+def link_link_to_work(link: OPDSLink, work_id):
+    """ Links a link record to a work record in the database. """
+    db = get_db()
+    # Look for an existing category record matching this category:
+    category_record = db.execute(
+        'SELECT * FROM link WHERE (href = ?, rel = ?, link_type = ?)',
+        (link.href, link.rel, link.type)).fetchone()
+    # TODO: If no existing record, insert one:
+    # TODO: If there is an existing record, update it:
+
+def work_to_db(work: AO3.Work, work_id=None):
+    """ Creates or updates a work record in the database """
+    db = get_db()
+    # Use our OPDS code to convert the AO3 data into the fields we want:
+    opds_work = AO3WorkOPDS(work)
+    values = (
+        opds_work.id, opds_work.title, opds_work.updated, opds_work.language,
+        opds_work.publisher, opds_work.summary)
+    # Insert or update the work:
+    if work_id is None:  # Work doesn't exist; insert a new one.
+        cursor = db.execute(
+            'INSERT INTO work (work_id, title, work_updated, '
+            'work_language, publisher, summary) '
+            'VALUES (?, ?, ?, ?, ?, ?)', values)
+        work_id = cursor.lastrowid
+    else:  # Work exists; update it.
+        db.execute(
+            'UPDATE work SET work_id = ?, title = ?, work_updated = ?, '
+            'work_language = ?, publisher = ?, summary = ? '
+            'WHERE (id = ?)', values + (work_id,))
+    # Add author/category/link records for this work
+    for author in opds_work.authors:
+        link_author_to_work(author, work_id)
+    for category in opds_work.categories:
+        link_category_to_work(category, work_id)
+    for link in opds_work.links:
+        link_link_to_work(link, work_id)
+
+    db.commit()  # Save changes
+    # Load the inserted/updated record and return it:
+    work_record = db.execute(
+        'SELECT * FROM work WHERE id = ?', (work_id,)).fetchone()
+    return work_record
+
 @celery.task
-def fetch_work_async(session, feed_id, work_id, force=False):
+def fetch_work_async(session, feed_id, ao3_work_id, force=False):
     """ Fetches a work for a feed using an authenticated user session. """
-    # TODO: Check for existing record of this work and, if it exists,
-    # skip if it was recently updated.
+    db = get_db()
+    update_threshold = datetime.datetime.now() - FEED_UPDATE_FREQUENCY
 
-    # TODO: Load an AO3.Work for `work_id` using `session`
+    # Check for existing record of this work and a feed-work connection:
+    work_record = db.execute(
+        'SELECT * FROM work WHERE work_id = ?',(ao3_work_id,)).fetchone()
 
-    # TODO: Add work record to the database. Need to update if there's
+    # If the work exists, ensure that it is associated with the feed:
+    # (We do this now to avoid)
+    if work_record is not None:
+        feed_entry_record = link_work_to_feed(work_record['id'], feed_id)
+    else:
+        feed_entry_record = None
+
+    # If the work exists and was recently updated skip it:
+    if work_record is not None and work_record['updated'] > update_threshold:
+        return session
+
+    # Load an AO3.Work for `work_id` using `session`
+    # TODO: use try-except to deal with errors/rate-limiting (retry?)
+    work = AO3.Work(
+        ao3_work_id, session=session, load=True, load_chapters=False)
+
+    # Add work record to the database. Need to update if there's
     # an existing record, or insert if no such record exists.
-
+    if work_record is None: # Insert if no existing record
+        pass
     # TODO: Add records to category, author, and link tables, and relate
     # this work to them via work_author and work_category tables.
     pass
 
 def fetch_work(
-        session, feed_id, work_id, force=False, priority=HIGH_PRIORITY):
+        session, feed_id, ao3_work_id, force=False, priority=HIGH_PRIORITY):
     """ Fetches a work for a feed using an authenticated user session. """
     # NOTE: Can preprocess parameters here, e.g. by serializing `session`
     return fetch_work_async.apply_async(
-        args=(session, feed_id, work_id),
+        args=(session, feed_id, ao3_work_id),
         kwargs={'force':force},
         # TODO: Add other async params, e.g. retry (or define in decorator?)
         priority=priority)
