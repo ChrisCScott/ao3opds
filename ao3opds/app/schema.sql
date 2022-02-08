@@ -16,7 +16,8 @@ CREATE TABLE ao3 (
   password TEXT NOT NULL,
   session BLOB,
   updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (user_id) REFERENCES user (id)
+  FOREIGN KEY (user_id) REFERENCES user (id),
+  UNIQUE (user_id)
 );
 
 CREATE TABLE feed (
