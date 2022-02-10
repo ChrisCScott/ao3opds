@@ -305,6 +305,88 @@ def link_work_to_feed(work_id, feed_id):
         'SELECT * FROM feed_entry WHERE (feed_id = ? AND work_id = ?)',
         values).fetchone()
 
+def record_to_db(
+        table: str, fields: dict[str, Any], keys: list[str],
+        id_field:str='id', updated_field:str|None='updated') -> int:
+    """ Creates or updates a record in `table`.
+    
+    Arguments:
+        table (str): the name of the table in which to create/update
+            a record.
+        fields (dict[str, Any]): A mapping from field names to values.
+            If inserting, all fields will be inserted with the mapped
+            values. If updating, only fields not found in `keys` will
+            be updated.
+        keys (list[str]): Names of fields which are used to query the
+            database for an existing record (as WHERE clause
+            parameters). Each value in `keys` must also be a key of
+            `fields` with a corresponding value (used in the query).
+        id (str): The name of the primary key field for `table`.
+            Optional. Defaults to "id".
+        updated_field (str | None): A convenience parameter. If not
+            None, the field with this name will be set to
+            `CURRENT_TIMESTAMP` in an UPDATE operation. Defaults to
+            "updated". Optional.
+
+    Returns:
+        (Any) The created/updated record, including all fields
+    """
+    db = get_db()
+    # Build the WHERE clause for SELECT and UPDATE queries:
+    where_fields = ' WHERE (' + fields[keys[0]]
+    for key in keys[1:]:
+        where_fields += ' AND ' + fields[key] + ' = ?'
+    where_fields = ')'
+    where_values = tuple(fields[key] for key in keys)
+    # Look for an existing record:
+    cursor = db.execute(
+        'SELECT * FROM ' + table + where_fields, where_values)
+    record = cursor.fetchone()
+    record_id = record[id_field] if record is not None else None
+    # If no existing record, insert one:
+    if record is None:
+        # Build a string of fields for use in an INSERT clause:
+        fields_iter = iter(fields)
+        insert_fields = ' (' + next(fields_iter)
+        for field in fields_iter:
+            insert_fields += ', ' + field
+        insert_fields = ')'
+        insert_values = ' VALUES (?'
+        for _ in range(len(fields) - 1):
+            insert_values += ', ?'
+        insert_values = ')'
+        cursor = db.execute(
+            'INSERT INTO ' + table + insert_fields + insert_values,
+            fields.values())
+        record_id = cursor.lastrowid
+    # If there is an existing record, update it:
+    else:
+        # Build a string of fields to update:
+        # Get the names of fields we'll be updating:
+        non_key_fields = [field for field in fields if field not in keys]
+        # We can optionally update a field to the current timestamp,
+        # so build a string for that too:
+        updated = updated_field + ' = CURRENT_TIMESTAMP' if updated_field else None
+        # Build a comma-separated list of field names (we handle the
+        # updated field a bit differently, so handle it separately)
+        if not non_key_fields:
+            update_fields = updated
+        else:
+            update_fields = non_key_fields[0] + ' = ?'
+            for field in non_key_fields[1:]:
+                update_fields += ', ' + field + ' = ?'
+            if updated:
+                update_fields += ', ' + updated
+        # Be sure to pass in the updated values before the values
+        # we query in the WHERE clause to find this record:
+        updated_values = tuple(
+                value for key, value in fields.items() if key in non_key_fields)
+        db.execute(
+            'UPDATE ' + table + ' SET ' + update_fields + where_fields,
+            updated_values + where_values)
+    db.commit()  # Save changes
+    # Collect the new/updated record to return to the user:
+    return record_id
 
 def link_author_to_work(work_id: int, author_id: int):
     """ Links an author record to a work record in the database. """
