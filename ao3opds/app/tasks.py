@@ -284,38 +284,94 @@ def link_work_to_feed(work_id, feed_id):
     (not `work.work_id`!)
     """
     db = get_db()
+    values = (feed_id, work_id)
     # Look for an existing linking record:
     feed_entry_record = db.execute(
         'SELECT * from feed_entry WHERE (feed_id = ?, work_id = ?)',
+        values).fetchone()
     # If no existing record, insert one:
     if feed_entry_record is None:
         db.execute(
-            'INSERT INTO feed_entry (feed_id, work_id) VALUES (?, ?)',
-            (feed_id, work_id))
+            'INSERT INTO feed_entry (feed_id, work_id) VALUES (?, ?)', values)
     # If there is an existing record, update it:
     else:
         db.execute(
             'UPDATE feed_entry SET updated = CURRENT_TIMESTAMP '
-            'WHERE (work_id = ? AND feed_id = ?)',
-            (work_id, feed_id))
+            'WHERE (feed_id = ? AND work_id = ?)',
+            values)
     db.commit()
-    # Return Collect the new/updated record to return to the user:
+    # Collect the new/updated record to return to the user:
     return db.execute(
-        'SELECT * FROM feed_entry WHERE (work_id = ?, feed_id = ?)',
-        (work_id, feed_id)).fetchone()
+        'SELECT * FROM feed_entry WHERE (feed_id = ? AND work_id = ?)',
+        values).fetchone()
 
-def link_author_to_work(author: OPDSPerson, work_id):
+
+def link_author_to_work(work_id: int, author_id: int):
     """ Links an author record to a work record in the database. """
     db = get_db()
+    # Look for an existing linking record connecting this author
+    # to this work.
+    link_record = db.execute(
+        'SELECT * from work_author WHERE (work_id = ?, author_id = ?)',
+        (work_id, author_id)).fetchone()
+    # If no existing record, insert one:
+    if link_record is None:
+        db.execute(
+            'INSERT INTO work_author (work_id, author_id) VALUES (?, ?)',
+            (work_id, author_id))
+    # If there is an existing record, update it:
+    else:
+        db.execute(
+            'UPDATE work_author SET updated = CURRENT_TIMESTAMP '
+            'WHERE (work_id = ? AND author_id = ?)', (work_id, author_id))
+    db.commit()
+    # Collect the new/updated record to return to the user:
+    return db.execute(
+        'SELECT * FROM work_author WHERE (work_id = ? AND author_id = ?)',
+        (work_id, author_id)).fetchone()
+
+def author_to_db(author: OPDSPerson, work_id=None):
+    """ Creates or updates an author record in the database. """
+    db = get_db()
+    values = (author.name, author.email, author.uri)
     # Look for an existing author record matching this author:
+    # NOTE: In this schema, author names are unique, so we match only
+    # on those. If duplicate names were allowed, we might want to select
+    # on multiple keys (such as email and/or uri).
     author_record = db.execute(
-        'SELECT * FROM author WHERE (name = ?, email = ?, uri = ?)',
-        (author.name, author.email, author.uri)).fetchone()
+        'SELECT * FROM author WHERE (name = ?)', author.name).fetchone()
+    # If no existing record, insert one:
+    if author_record is None:
+        db.execute(
+            'INSERT INTO author (name, email, uri) VALUES (?, ?, ?)', values)
+    # If there is an existing record, update it:
+    else:
+        db.execute(
+            'UPDATE author SET email = ?, uri = ?, '
+            'updated = CURRENT_TIMESTAMP WHERE (name = ?)', values)
+    author_record = db.execute(
+        'SELECT * FROM author WHERE (name = ?)', author.name).fetchone()
+    # Link the author to a work if a work_id was provided:
+    if work_id is not None:
+        link_author_to_work(author_record['id'], work_id)
+    # Collect the new/updated record to return to the user:
+    return author_record
+
+def category_to_db(category: OPDSCategory, work_id=None):
+    """ Creates or updates a category record. """
+    db = get_db()
+    # Look for an existing category record matching this category:
+    category_record = db.execute(
+        'SELECT * FROM category WHERE (term = ?, scheme = ?, label = ?)',
+        (category.term, category.scheme, category.label)).fetchone()
     # TODO: If no existing record, insert one:
     # TODO: If there is an existing record, update it:
-    # TODO: Look for an existing linking record connecting this author
+    # TODO: Look for an existing linking record connecting this category
     # to this work.
-    # TODO: Add a linking record if one does not yet exist:
+    # Add a linking record if one does not yet exist:
+    if work_id is not None:
+        link_category_to_work(category_record['id'], work_id)
+    # Collect the new/updated record to return to the user:
 
 def link_category_to_work(category: OPDSCategory, work_id):
     """ Links a category record to a work record in the database. """
@@ -330,8 +386,8 @@ def link_category_to_work(category: OPDSCategory, work_id):
     # to this work.
     # TODO: Add a linking record if one does not yet exist:
 
-def link_link_to_work(link: OPDSLink, work_id):
-    """ Links a link record to a work record in the database. """
+def link_to_db(link: OPDSLink, work_id):
+    """ Creates or updates a link record in the database. """
     db = get_db()
     # Look for an existing category record matching this category:
     category_record = db.execute(
@@ -362,11 +418,11 @@ def work_to_db(work: AO3.Work, work_id=None):
             'WHERE (id = ?)', values + (work_id,))
     # Add author/category/link records for this work
     for author in opds_work.authors:
-        link_author_to_work(author, work_id)
+        author_to_db(author, work_id)
     for category in opds_work.categories:
-        link_category_to_work(category, work_id)
+        category_to_db(category, work_id)
     for link in opds_work.links:
-        link_link_to_work(link, work_id)
+        link_to_db(link, work_id)
 
     db.commit()  # Save changes
     # Load the inserted/updated record and return it:
