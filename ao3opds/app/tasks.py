@@ -53,13 +53,13 @@ def ao3_user_to_db(user_id, ao3_username, ao3_password, session):
 
     # Get the existing record, if any:
     user_record = db.execute(
-        "SELECT * FROM ao3 WHERE user_id = ?", (user_id,)).fetchone()
+        "SELECT * FROM ao3 WHERE (user_id = ?)", (user_id,)).fetchone()
 
     # Update the existing record if it exists:
     if user_record is not None:
         db.execute(
             "UPDATE ao3 SET username = ?, password = ?, session = ?,"
-            " updated = CURRENT_TIMESTAMP WHERE user_id = ?",
+            " updated = CURRENT_TIMESTAMP WHERE (user_id = ?)",
             (ao3_username, ao3_password, dump_ao3_session(session), user_id))
     else:
         db.execute(
@@ -69,7 +69,7 @@ def ao3_user_to_db(user_id, ao3_username, ao3_password, session):
     db.commit()  # Save changes to file
 
     new_user_record = db.execute(
-        "SELECT * FROM ao3 WHERE user_id = ?", (user_id,)).fetchone()
+        "SELECT * FROM ao3 WHERE (user_id = ?)", (user_id,)).fetchone()
 
     return (user_record, new_user_record)
 
@@ -176,7 +176,7 @@ def feed_to_db(ao3_user_id, feed_type):
     db = get_db()
     # Check for an existing record:
     feed_record = db.execute(
-        'SELECT * FROM feed WHERE (user_id = ? and feed_type = ?)',
+        'SELECT * FROM feed WHERE (user_id = ? AND feed_type = ?)',
         (ao3_user_id, feed_type)).fetchone()
     if feed_record is not None:
         return (feed_record, False)  # not updated
@@ -187,7 +187,7 @@ def feed_to_db(ao3_user_id, feed_type):
     db.commit()  # Save changes
     # Grab the updated record:
     feed_record = db.execute(
-        'SELECT * FROM feed WHERE (user_id = ? and feed_type = ?)',
+        'SELECT * FROM feed WHERE (user_id = ? AND feed_type = ?)',
         (ao3_user_id, feed_type)).fetchone()
     return (feed_record, True)  # updated
 
@@ -209,7 +209,7 @@ def update_feed_works(session, feed_type, feed_id, fetch_modes, priority):
         'SELECT work.id, work.work_id, work.feed_id, work.updated, '
         'feed_entry.id, feed_entry.updated '
         'FROM work JOIN feed_entry ON work.id = feed_entry.work_id '
-        'WHERE feed_entry.feed_id = ?', (feed_id,)
+        'WHERE (feed_entry.feed_id = ?)', (feed_id,)
     ).fetchall())
 
     # Separate the works and records into matched/unmatched groups:
@@ -219,7 +219,7 @@ def update_feed_works(session, feed_type, feed_id, fetch_modes, priority):
     # Remove unmatched records from this feed:
     for record in unmatched_records:
         db.execute(
-            'DELETE FROM feed_entry WHERE id = ?', (record['feed_entry.id'],))
+            'DELETE FROM feed_entry WHERE (id = ?)', (record['feed_entry.id'],))
     db.commit()
 
     # If we're fetching everything, don't skip existing works:
@@ -262,7 +262,7 @@ def fetch_feed(
 
     # The feed has been updated, so update its record accordingly:
     db.execute(
-        "UPDATE feed SET updated = CURRENT_TIMESTAMP WHERE feed_id = ?",
+        "UPDATE feed SET updated = CURRENT_TIMESTAMP WHERE (feed_id = ?)",
         (feed_id,))
 
     return session
@@ -286,8 +286,7 @@ def link_work_to_feed(work_id, feed_id):
     db = get_db()
     # Look for an existing linking record:
     feed_entry_record = db.execute(
-        'SELECT * from feed_entry WHERE (work_id = ?, feed_id = ?)',
-        (work_id, feed_id)).fetchone()
+        'SELECT * from feed_entry WHERE (feed_id = ?, work_id = ?)',
     # If no existing record, insert one:
     if feed_entry_record is None:
         db.execute(
@@ -336,7 +335,7 @@ def link_link_to_work(link: OPDSLink, work_id):
     db = get_db()
     # Look for an existing category record matching this category:
     category_record = db.execute(
-        'SELECT * FROM link WHERE (href = ?, rel = ?, link_type = ?)',
+        'SELECT * FROM link WHERE (href = ? AND rel = ? AND link_type = ?)',
         (link.href, link.rel, link.type)).fetchone()
     # TODO: If no existing record, insert one:
     # TODO: If there is an existing record, update it:
@@ -372,7 +371,7 @@ def work_to_db(work: AO3.Work, work_id=None):
     db.commit()  # Save changes
     # Load the inserted/updated record and return it:
     work_record = db.execute(
-        'SELECT * FROM work WHERE id = ?', (work_id,)).fetchone()
+        'SELECT * FROM work WHERE (id = ?)', (work_id,)).fetchone()
     return work_record
 
 @celery.task
@@ -383,7 +382,7 @@ def fetch_work(session, feed_id, ao3_work_id, fetch_modes=FETCH_MODES_DEFAULT):
 
     # Check for existing record of this work and a feed-work connection:
     work_record = db.execute(
-        'SELECT * FROM work WHERE work_id = ?',(ao3_work_id,)).fetchone()
+        'SELECT * FROM work WHERE (work_id = ?)',(ao3_work_id,)).fetchone()
 
     # If the work exists, ensure that it is associated with the feed:
     # (We do this now to avoid dataloss if we fail to load the work)
