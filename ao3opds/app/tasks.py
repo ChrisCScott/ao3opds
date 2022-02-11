@@ -13,6 +13,7 @@ https://blog.miguelgrinberg.com/post/celery-and-the-flask-application-factory-pa
 https://docs.celeryproject.org/en/3.1/userguide/calling.html
 '''
 
+from dataclasses import dataclass
 import datetime
 import enum
 from typing import Any
@@ -47,31 +48,37 @@ FETCH_MODES_DEFAULT = {
     'FEED': FetchMode.UPDATE_STALE,
     'WORK': FetchMode.UPDATE_STALE}
 
+@dataclass
+class RecordResult:
+    """ Struct for returning information about created/updated records.
+
+    Attributes:
+        id (int): Primary key for the record that was created/updated.
+        table (str): The name of the table of the record.
+        id_field (str): The name of the primary key's field.
+        updated (bool): True if the record was updated, False otherwise.
+        created (bool): True if the record was created, False otherwise.
+    """
+    id: int
+    table: str
+    id_field: str
+    old_record: Any
+
+    def record(self) -> Any:
+        """ Fetches the record that was created or updated. """
+        return get_db().execute(
+            'SELECT * FROM ' + self.table + ' WHERE ' + self.id_field + ' = ?',
+            (self.id,)).fetchone()
+
 def ao3_user_to_db(user_id, ao3_username, ao3_password, session):
     """ Creates or updates an ao3 user record in the database """
-    db = get_db()
-
-    # Get the existing record, if any:
-    user_record = db.execute(
-        "SELECT * FROM ao3 WHERE (user_id = ?)", (user_id,)).fetchone()
-
-    # Update the existing record if it exists:
-    if user_record is not None:
-        db.execute(
-            "UPDATE ao3 SET username = ?, password = ?, session = ?,"
-            " updated = CURRENT_TIMESTAMP WHERE (user_id = ?)",
-            (ao3_username, ao3_password, dump_ao3_session(session), user_id))
-    else:
-        db.execute(
-            "INSERT INTO ao3 (user_id, username, password, session)"
-            " VALUES (?, ?, ?, ?)",
-            (user_id, ao3_username, ao3_password, dump_ao3_session(session)))
-    db.commit()  # Save changes to file
-
-    new_user_record = db.execute(
-        "SELECT * FROM ao3 WHERE (user_id = ?)", (user_id,)).fetchone()
-
-    return (user_record, new_user_record)
+    fields = {
+        'user_id': user_id,
+        'username': ao3_username,
+        'password': ao3_password,
+        'session': dump_ao3_session(session)}
+    keys = ['user_id']
+    return record_to_db('ao3', fields, keys)
 
 @celery.task(bind=True)
 def fetch_ao3_user(
@@ -91,15 +98,15 @@ def fetch_ao3_user(
     # TODO: Handle failure.
 
     # Create/update ao3 user record:
-    (old_user_record, new_user_record) = ao3_user_to_db(
+    record = ao3_user_to_db(
         user_id, ao3_username, ao3_password, session)
-    ao3_user_id = new_user_record['id']
+    ao3_user_id = record.id
 
     # Check to see if the AO3 user account changed. If it did, don't
     # delete the feeds - instead, force updates on the feed.
     if (
-            old_user_record is not None and
-            old_user_record['user_id'] != ao3_username):
+            record.old_record is not None and
+            record.old_record['user_id'] != ao3_username):
         fetch_modes = dict(fetch_modes)  # don't mutate input dict
         fetch_modes['FEED'] = FetchMode.FORCE
 
@@ -171,25 +178,13 @@ def match_works_to_records(
                 break
     return (matched, unmatched_records, unmatched_works)
 
-def feed_to_db(ao3_user_id, feed_type):
+def feed_to_db(ao3_user_id: int, feed_type: str) -> RecordResult:
     """ Gets a feed record from the database, creating it if needed. """
-    db = get_db()
-    # Check for an existing record:
-    feed_record = db.execute(
-        'SELECT * FROM feed WHERE (user_id = ? AND feed_type = ?)',
-        (ao3_user_id, feed_type)).fetchone()
-    if feed_record is not None:
-        return (feed_record, False)  # not updated
-    # If the record doesn't exist, create it and then grab its id:
-    db.execute(
-        'INSERT INTO feed (user_id, feed_type) VALUES (?, ?)',
-        (ao3_user_id, feed_type))
-    db.commit()  # Save changes
-    # Grab the updated record:
-    feed_record = db.execute(
-        'SELECT * FROM feed WHERE (user_id = ? AND feed_type = ?)',
-        (ao3_user_id, feed_type)).fetchone()
-    return (feed_record, True)  # updated
+    fields = {
+        'user_id': ao3_user_id,
+        'feed_type': feed_type}
+    keys = ['user_id', 'feed_type']
+    return record_to_db('feed', fields, keys)
 
 def update_feed_works(session, feed_type, feed_id, fetch_modes, priority):
     """ Removes """
@@ -246,24 +241,25 @@ def fetch_feed(
     update_threshold = datetime.datetime.now() - FEED_UPDATE_FREQUENCY
 
     # Check for existing record of this feed_type for this user_id:
-    feed_record, feed_is_new = feed_to_db(ao3_user_id, feed_type)
+    record = feed_to_db(ao3_user_id, feed_type)
+    # TODO: Prevent feed_to_db from updating if the record is not stale
+    feed_record = record.record()
     # If it exists and was recently updated, skip it:
     if (
-            not feed_is_new and
+            # TODO: Revise this to make sense with the new
+            # feed_to_db logic/return value.
+            record.old_record is not None and
             feed_record['updated'] > update_threshold and
             fetch_modes['FEED'] != FetchMode.FORCE):
         return session
 
-    # Store this value for convenience:
-    feed_id = feed_record['id']
-
     # Update the db records of works for this feed:
-    update_feed_works(session, feed_type, feed_id, fetch_modes, priority)
+    update_feed_works(session, feed_type, record.id, fetch_modes, priority)
 
     # The feed has been updated, so update its record accordingly:
     db.execute(
         "UPDATE feed SET updated = CURRENT_TIMESTAMP WHERE (feed_id = ?)",
-        (feed_id,))
+        (record.id,))
 
     return session
 
@@ -283,31 +279,66 @@ def link_work_to_feed(work_id, feed_id):
     Note that `work_id` references the `id` field of the `work` table
     (not `work.work_id`!)
     """
-    db = get_db()
-    values = (feed_id, work_id)
-    # Look for an existing linking record:
-    feed_entry_record = db.execute(
-        'SELECT * from feed_entry WHERE (feed_id = ?, work_id = ?)',
-        values).fetchone()
-    # If no existing record, insert one:
-    if feed_entry_record is None:
-        db.execute(
-            'INSERT INTO feed_entry (feed_id, work_id) VALUES (?, ?)', values)
-    # If there is an existing record, update it:
+    fields = {
+        'work_id': work_id,
+        'feed_id': feed_id}
+    keys = ['work_id', 'feed_id']
+    return record_to_db('feed_entry', fields, keys)
+
+def _where_clause(table, fields, keys) -> tuple[str, str]:
+    """ Builds a WHERE clause from `fields` and `keys`. """
+    where_fields = ' WHERE (' + fields[keys[0]]
+    for key in keys[1:]:
+        where_fields += ' AND ' + fields[key] + ' = ?'
+    where_fields = ')'
+    where_values = tuple(fields[key] for key in keys)
+    return (where_fields, where_values)
+
+def _insert_query(table, fields, keys):
+    """ Builds an INSERT query. """
+    # Build a string of fields for use in an INSERT clause:
+    fields_iter = iter(fields)
+    insert_fields = ' (' + next(fields_iter)
+    for field in fields_iter:
+        insert_fields += ', ' + field
+    insert_fields = ')'
+    insert_values = ' VALUES (?'
+    for _ in range(len(fields) - 1):
+        insert_values += ', ?'
+    insert_values = ')'
+    insert_query = 'INSERT INTO ' + table + insert_fields + insert_values
+    return (insert_query, fields.values())
+
+def _update_query(
+        table, fields, keys, updated_field, where_clause, where_values):
+    """ """
+    # Build a string of fields to update:
+    # Get the names of fields we'll be updating:
+    non_key_fields = [field for field in fields if field not in keys]
+    # We can optionally update a field to the current timestamp,
+    # so build a string for that too:
+    updated_clause = (
+        updated_field + ' = CURRENT_TIMESTAMP' if updated_field else None)
+    # Build a comma-separated list of field names (we handle the
+    # updated field a bit differently, so handle it separately)
+    if not non_key_fields:
+        update_fields = updated_clause
     else:
-        db.execute(
-            'UPDATE feed_entry SET updated = CURRENT_TIMESTAMP '
-            'WHERE (feed_id = ? AND work_id = ?)',
-            values)
-    db.commit()
-    # Collect the new/updated record to return to the user:
-    return db.execute(
-        'SELECT * FROM feed_entry WHERE (feed_id = ? AND work_id = ?)',
-        values).fetchone()
+        update_fields = non_key_fields[0] + ' = ?'
+        for field in non_key_fields[1:]:
+            update_fields += ', ' + field + ' = ?'
+        if updated_clause:
+            update_fields += ', ' + updated_clause
+    # Be sure to pass in the updated values before the values
+    # we query in the WHERE clause to find this record:
+    update_values = tuple(
+        value for key, value in fields.items() if key in non_key_fields)
+    update_query = 'UPDATE ' + table + ' SET ' + update_fields + where_clause
+    return (update_query, update_values + where_values)
 
 def record_to_db(
         table: str, fields: dict[str, Any], keys: list[str],
-        id_field:str='id', updated_field:str|None='updated') -> int:
+        id_field:str='id', updated_field:str|None='updated') -> RecordResult:
     """ Creates or updates a record in `table`.
     
     Arguments:
@@ -333,184 +364,102 @@ def record_to_db(
     """
     db = get_db()
     # Build the WHERE clause for SELECT and UPDATE queries:
-    where_fields = ' WHERE (' + fields[keys[0]]
-    for key in keys[1:]:
-        where_fields += ' AND ' + fields[key] + ' = ?'
-    where_fields = ')'
-    where_values = tuple(fields[key] for key in keys)
+    where_clause, where_values = _where_clause(fields, keys)
     # Look for an existing record:
     cursor = db.execute(
-        'SELECT * FROM ' + table + where_fields, where_values)
+        'SELECT * FROM ' + table + where_clause, where_values)
     record = cursor.fetchone()
     record_id = record[id_field] if record is not None else None
     # If no existing record, insert one:
     if record is None:
-        # Build a string of fields for use in an INSERT clause:
-        fields_iter = iter(fields)
-        insert_fields = ' (' + next(fields_iter)
-        for field in fields_iter:
-            insert_fields += ', ' + field
-        insert_fields = ')'
-        insert_values = ' VALUES (?'
-        for _ in range(len(fields) - 1):
-            insert_values += ', ?'
-        insert_values = ')'
-        cursor = db.execute(
-            'INSERT INTO ' + table + insert_fields + insert_values,
-            fields.values())
+        insert_query, insert_values = _insert_query(table, fields, keys)
+        cursor = db.execute(insert_query, insert_values)
         record_id = cursor.lastrowid
     # If there is an existing record, update it:
     else:
-        # Build a string of fields to update:
-        # Get the names of fields we'll be updating:
-        non_key_fields = [field for field in fields if field not in keys]
-        # We can optionally update a field to the current timestamp,
-        # so build a string for that too:
-        updated = updated_field + ' = CURRENT_TIMESTAMP' if updated_field else None
-        # Build a comma-separated list of field names (we handle the
-        # updated field a bit differently, so handle it separately)
-        if not non_key_fields:
-            update_fields = updated
-        else:
-            update_fields = non_key_fields[0] + ' = ?'
-            for field in non_key_fields[1:]:
-                update_fields += ', ' + field + ' = ?'
-            if updated:
-                update_fields += ', ' + updated
-        # Be sure to pass in the updated values before the values
-        # we query in the WHERE clause to find this record:
-        updated_values = tuple(
-                value for key, value in fields.items() if key in non_key_fields)
-        db.execute(
-            'UPDATE ' + table + ' SET ' + update_fields + where_fields,
-            updated_values + where_values)
+        update_query, update_values = _update_query(
+            table, fields, keys, updated_field, where_clause, where_values)
+        db.execute(update_query, update_values)
     db.commit()  # Save changes
     # Collect the new/updated record to return to the user:
-    return record_id
+    return RecordResult(record_id, table, id_field, record)
 
 def link_author_to_work(work_id: int, author_id: int):
     """ Links an author record to a work record in the database. """
-    db = get_db()
-    # Look for an existing linking record connecting this author
-    # to this work.
-    link_record = db.execute(
-        'SELECT * from work_author WHERE (work_id = ?, author_id = ?)',
-        (work_id, author_id)).fetchone()
-    # If no existing record, insert one:
-    if link_record is None:
-        db.execute(
-            'INSERT INTO work_author (work_id, author_id) VALUES (?, ?)',
-            (work_id, author_id))
-    # If there is an existing record, update it:
-    else:
-        db.execute(
-            'UPDATE work_author SET updated = CURRENT_TIMESTAMP '
-            'WHERE (work_id = ? AND author_id = ?)', (work_id, author_id))
-    db.commit()
-    # Collect the new/updated record to return to the user:
-    return db.execute(
-        'SELECT * FROM work_author WHERE (work_id = ? AND author_id = ?)',
-        (work_id, author_id)).fetchone()
+    fields = {
+        'work_id': work_id,
+        'author_id': author_id}
+    keys = ['work_id', 'author_id']
+    return record_to_db('work_author', fields, keys)
 
-def author_to_db(author: OPDSPerson, work_id=None):
+def author_to_db(author: OPDSPerson, work_id=None) -> RecordResult:
     """ Creates or updates an author record in the database. """
-    db = get_db()
-    values = (author.name, author.email, author.uri)
-    # Look for an existing author record matching this author:
-    # NOTE: In this schema, author names are unique, so we match only
-    # on those. If duplicate names were allowed, we might want to select
-    # on multiple keys (such as email and/or uri).
-    author_record = db.execute(
-        'SELECT * FROM author WHERE (name = ?)', author.name).fetchone()
-    # If no existing record, insert one:
-    if author_record is None:
-        db.execute(
-            'INSERT INTO author (name, email, uri) VALUES (?, ?, ?)', values)
-    # If there is an existing record, update it:
-    else:
-        db.execute(
-            'UPDATE author SET email = ?, uri = ?, '
-            'updated = CURRENT_TIMESTAMP WHERE (name = ?)', values)
-    author_record = db.execute(
-        'SELECT * FROM author WHERE (name = ?)', author.name).fetchone()
+    fields = {
+        'name': author.name,
+        'email': author.email,
+        'uri': author.uri}
+    keys = ['name']
+    record = record_to_db('author', fields, keys)
     # Link the author to a work if a work_id was provided:
     if work_id is not None:
-        link_author_to_work(author_record['id'], work_id)
+        link_author_to_work(record.id, work_id)
     # Collect the new/updated record to return to the user:
-    return author_record
+    return record
 
 def category_to_db(category: OPDSCategory, work_id=None):
     """ Creates or updates a category record. """
-    db = get_db()
-    # Look for an existing category record matching this category:
-    category_record = db.execute(
-        'SELECT * FROM category WHERE (term = ?, scheme = ?, label = ?)',
-        (category.term, category.scheme, category.label)).fetchone()
-    # TODO: If no existing record, insert one:
-    # TODO: If there is an existing record, update it:
-    # TODO: Look for an existing linking record connecting this category
-    # to this work.
+    fields = {
+        'term': category.term,
+        'scheme': category.scheme,
+        'label': category.label}
+    keys = list(fields)
+    record = record_to_db('category', fields, keys)
     # Add a linking record if one does not yet exist:
     if work_id is not None:
-        link_category_to_work(category_record['id'], work_id)
-    # Collect the new/updated record to return to the user:
+        link_category_to_work(record.id, work_id)
+    return record
 
-def link_category_to_work(category: OPDSCategory, work_id):
+def link_category_to_work(category_id, work_id):
     """ Links a category record to a work record in the database. """
-    db = get_db()
-    # Look for an existing category record matching this category:
-    category_record = db.execute(
-        'SELECT * FROM category WHERE (term = ?, scheme = ?, label = ?)',
-        (category.term, category.scheme, category.label)).fetchone()
-    # TODO: If no existing record, insert one:
-    # TODO: If there is an existing record, update it:
-    # TODO: Look for an existing linking record connecting this category
-    # to this work.
-    # TODO: Add a linking record if one does not yet exist:
+    fields = {
+        'work_id': work_id,
+        'category_id': category_id}
+    keys = list(fields)
+    return record_to_db('work_category', fields, keys)
 
 def link_to_db(link: OPDSLink, work_id):
     """ Creates or updates a link record in the database. """
-    db = get_db()
-    # Look for an existing category record matching this category:
-    category_record = db.execute(
-        'SELECT * FROM link WHERE (href = ? AND rel = ? AND link_type = ?)',
-        (link.href, link.rel, link.type)).fetchone()
-    # TODO: If no existing record, insert one:
-    # TODO: If there is an existing record, update it:
+    fields = {
+        'work_id': work_id,
+        'href': link.href,
+        'rel': link.rel,
+        'link_type': link.type}
+    keys = list(fields)
+    return record_to_db('link', fields, keys)
 
-def work_to_db(work: AO3.Work, work_id=None):
+def work_to_db(work: AO3.Work):
     """ Creates or updates a work record in the database """
-    db = get_db()
     # Use our OPDS code to convert the AO3 data into the fields we want:
     opds_work = AO3WorkOPDS(work)
-    values = (
-        opds_work.id, opds_work.title, opds_work.updated, opds_work.language,
-        opds_work.publisher, opds_work.summary)
-    # Insert or update the work:
-    if work_id is None:  # Work doesn't exist; insert a new one.
-        cursor = db.execute(
-            'INSERT INTO work (work_id, title, work_updated, '
-            'work_language, publisher, summary) '
-            'VALUES (?, ?, ?, ?, ?, ?)', values)
-        work_id = cursor.lastrowid
-    else:  # Work exists; update it.
-        db.execute(
-            'UPDATE work SET work_id = ?, title = ?, work_updated = ?, '
-            'work_language = ?, publisher = ?, summary = ? '
-            'WHERE (id = ?)', values + (work_id,))
+    fields = {
+        'work_id': opds_work.id,
+        'title': opds_work.title,
+        'work_updated': opds_work.updated,
+        'work_language': opds_work.language,
+        'publisher': opds_work.publisher,
+        'summary': opds_work.summary}
+    keys = ['work_id']
+    record = record_to_db('work', fields, keys)
+
     # Add author/category/link records for this work
     for author in opds_work.authors:
-        author_to_db(author, work_id)
+        author_to_db(author, record.id)
     for category in opds_work.categories:
-        category_to_db(category, work_id)
+        category_to_db(category, record.id)
     for link in opds_work.links:
-        link_to_db(link, work_id)
+        link_to_db(link, record.id)
 
-    db.commit()  # Save changes
-    # Load the inserted/updated record and return it:
-    work_record = db.execute(
-        'SELECT * FROM work WHERE (id = ?)', (work_id,)).fetchone()
-    return work_record
+    return record
 
 @celery.task
 def fetch_work(session, feed_id, ao3_work_id, fetch_modes=FETCH_MODES_DEFAULT):
@@ -543,12 +492,11 @@ def fetch_work(session, feed_id, ao3_work_id, fetch_modes=FETCH_MODES_DEFAULT):
 
     # Add work record to the database.
     # (This also adds dependent author/category/link records)
-    work_id = work_record['id'] if work_record is not None else None
-    work_record = work_to_db(work, work_id)
+    record = work_to_db(work)
 
     # If the work is newly-added, link it to the feed:
     if feed_entry_record is None:
-        link_work_to_feed(work_record['id'], feed_id)
+        link_work_to_feed(record.id, feed_id)
 
     return session
 
